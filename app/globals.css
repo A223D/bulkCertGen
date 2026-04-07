@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-canvas: #f5f1e8;
+  --color-ink: #000000;
+  --color-accent: #b45309;
+  --color-panel: #fffdf8;
+  --color-line: #e7dcc7;
+  --shadow-card: 0 16px 40px rgba(28, 25, 23, 0.08);
+}
+
+:root {
+  color-scheme: light;
+  font-family:
+    "Segoe UI", "Helvetica Neue", Helvetica, Arial, ui-sans-serif, system-ui,
+    sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-canvas text-ink antialiased;
+}
+
+a {
+  @apply transition-colors;
+}
+
+::selection {
+  @apply bg-accent text-white;
+}

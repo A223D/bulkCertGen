@@ -5,3 +5,11 @@ export type CertificateField = {
   x: number;
   y: number;
 };
+
+export type CsvRow = Record<string, string>;
+
+export type ParsedCsvData = {
+  fileName: string;
+  columns: string[];
+  rows: CsvRow[];
+};

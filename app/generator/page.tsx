@@ -1,10 +1,5 @@
-import { AppShell } from "@/components/app-shell";
-import { GeneratorWorkspacePlaceholder } from "@/features/generator/components/generator-workspace-placeholder";
+import { redirect } from "next/navigation";
 
 export default function GeneratorPage() {
-  return (
-    <AppShell>
-      <GeneratorWorkspacePlaceholder />
-    </AppShell>
-  );
+  redirect("/app");
 }

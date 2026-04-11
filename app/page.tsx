@@ -18,20 +18,20 @@ export default function HomePage() {
           </p>
           <div className="space-y-4">
             <h1 className="max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-              Build certificate layouts now, wire up data flows later.
+              Design bulk certificate layouts in a focused frontend workspace.
             </h1>
             <p className="max-w-xl text-base leading-7 text-stone-700 sm:text-lg">
-              This MVP foundation is set up for a frontend-first workflow: define
-              routes, shape the UI, and iterate quickly before CSV parsing,
-              uploads, or PDF export are added.
+              This MVP stays intentionally lightweight: a simple landing page,
+              a dedicated generator route, and a desktop-first layout ready for
+              future CSV mapping, canvas editing, and export actions.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/generator"
+              href="/app"
               className="rounded-full bg-ink px-5 py-3 text-sm font-medium text-white hover:bg-stone-800"
             >
-              Open generator workspace
+              Open generator app
             </Link>
             <a
               href="#mvp-scope"
@@ -42,7 +42,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-line bg-panel p-6 shadow-card">
+        <div className="rounded-4xl border border-line bg-panel p-6 shadow-card">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-stone-500">
             Planned flow
           </p>
@@ -61,15 +61,15 @@ export default function HomePage() {
 
       <section
         id="mvp-scope"
-        className="grid gap-4 rounded-[2rem] border border-line bg-panel p-6 shadow-card sm:grid-cols-3"
+        className="grid gap-4 rounded-4xl border border-line bg-panel p-6 shadow-card sm:grid-cols-3"
       >
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-stone-500">
             Included now
           </p>
           <p className="mt-2 text-sm leading-6 text-stone-700">
-            App Router structure, TypeScript, Tailwind, shared shell, and route
-            placeholders for the landing page and generator.
+            App Router structure, TypeScript, Tailwind, shared shell, and a
+            generator route at `/app` with a desktop-first workspace layout.
           </p>
         </div>
         <div>
@@ -86,8 +86,8 @@ export default function HomePage() {
             Next build step
           </p>
           <p className="mt-2 text-sm leading-6 text-stone-700">
-            Implement the generator UI inside the feature folder without needing
-            to restructure the app again.
+            Replace the panel placeholders with real template controls, row
+            preview, and field editing without changing the route structure.
           </p>
         </div>
       </section>

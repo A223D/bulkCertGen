@@ -1,9 +1,10 @@
 "use client";
 
-import { useId, useState } from "react";
+import Image from "next/image";
+import { useEffect, useId, useRef, useState } from "react";
 import Papa from "papaparse";
 import { formatPlaceholderLabel } from "@/lib/utils";
-import type { ParsedCsvData } from "@/types";
+import type { BackgroundImageData, ParsedCsvData } from "@/types";
 
 const placeholderFields = [
   { label: "Recipient name", position: "X: 50%, Y: 42%", source: "full_name" },
@@ -12,6 +13,8 @@ const placeholderFields = [
 ];
 
 const previewRowLimit = 5;
+const allowedBackgroundTypes = new Set(["image/png", "image/jpeg"]);
+const allowedBackgroundExtensions = [".png", ".jpg", ".jpeg"];
 
 type CsvUploadState = {
   data: ParsedCsvData | null;
@@ -19,8 +22,46 @@ type CsvUploadState = {
   isParsing: boolean;
 };
 
+type BackgroundUploadState = {
+  data: BackgroundImageData | null;
+  error: string | null;
+  isLoading: boolean;
+};
+
 function normalizeCell(value: string | undefined) {
   return value?.trim() ?? "";
+}
+
+function isAllowedBackgroundFile(file: File) {
+  if (allowedBackgroundTypes.has(file.type)) {
+    return true;
+  }
+
+  const lowerCaseName = file.name.toLowerCase();
+  return allowedBackgroundExtensions.some((extension) => lowerCaseName.endsWith(extension));
+}
+
+function loadBackgroundImage(file: File): Promise<BackgroundImageData> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new window.Image();
+
+    image.onload = () => {
+      resolve({
+        fileName: file.name,
+        url,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+      });
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Unable to read the selected image."));
+    };
+
+    image.src = url;
+  });
 }
 
 function parseCsvText(text: string, fileName: string): ParsedCsvData {
@@ -32,12 +73,7 @@ function parseCsvText(text: string, fileName: string): ParsedCsvData {
     throw new Error(result.errors[0]?.message || "Invalid CSV file.");
   }
 
-  console.log(result.data)
-  const rawRows = result.data.filter(
-    (row) => row.some(
-      (cell) => normalizeCell(cell) !== ""
-    )
-  );
+  const rawRows = result.data.filter((row) => row.some((cell) => normalizeCell(cell) !== ""));
 
   if (rawRows.length === 0) {
     throw new Error("The CSV file is empty.");
@@ -73,14 +109,29 @@ function parseCsvText(text: string, fileName: string): ParsedCsvData {
 }
 
 export function GeneratorWorkspacePlaceholder() {
-  const fileInputId = useId();
+  const csvInputId = useId();
+  const backgroundInputId = useId();
+  const backgroundUrlRef = useRef<string | null>(null);
   const [csvState, setCsvState] = useState<CsvUploadState>({
     data: null,
     error: null,
     isParsing: false,
   });
+  const [backgroundState, setBackgroundState] = useState<BackgroundUploadState>({
+    data: null,
+    error: null,
+    isLoading: false,
+  });
 
   const previewRows = csvState.data?.rows.slice(0, previewRowLimit) ?? [];
+
+  useEffect(() => {
+    return () => {
+      if (backgroundUrlRef.current) {
+        URL.revokeObjectURL(backgroundUrlRef.current);
+      }
+    };
+  }, []);
 
   async function handleCsvUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -119,6 +170,64 @@ export function GeneratorWorkspacePlaceholder() {
         data: null,
         error: error instanceof Error ? error.message : "Unable to parse the CSV file.",
         isParsing: false,
+      });
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function handleBackgroundUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    if (file.size === 0) {
+      setBackgroundState({
+        data: null,
+        error: "The selected image file is empty.",
+        isLoading: false,
+      });
+      event.target.value = "";
+      return;
+    }
+
+    if (!isAllowedBackgroundFile(file)) {
+      setBackgroundState({
+        data: null,
+        error: "Please choose a PNG or JPG image.",
+        isLoading: false,
+      });
+      event.target.value = "";
+      return;
+    }
+
+    setBackgroundState((current) => ({
+      data: current.data,
+      error: null,
+      isLoading: true,
+    }));
+
+    try {
+      const backgroundImage = await loadBackgroundImage(file);
+
+      if (backgroundUrlRef.current) {
+        URL.revokeObjectURL(backgroundUrlRef.current);
+      }
+
+      backgroundUrlRef.current = backgroundImage.url;
+
+      setBackgroundState({
+        data: backgroundImage,
+        error: null,
+        isLoading: false,
+      });
+    } catch (error) {
+      setBackgroundState({
+        data: null,
+        error: error instanceof Error ? error.message : "Unable to load the selected image.",
+        isLoading: false,
       });
     } finally {
       event.target.value = "";
@@ -191,16 +300,74 @@ export function GeneratorWorkspacePlaceholder() {
             </p>
             <div className="mt-5 space-y-5">
               <section>
+                <h2 className="text-lg font-semibold">Background image</h2>
+                <div className="mt-3 rounded-2xl border border-dashed border-line bg-panel p-4">
+                  <label
+                    htmlFor={backgroundInputId}
+                    className="inline-flex cursor-pointer rounded-full bg-ink px-4 py-2 text-sm font-medium text-white"
+                  >
+                    Choose PNG/JPG image
+                  </label>
+                  <input
+                    id={backgroundInputId}
+                    type="file"
+                    accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                    className="sr-only"
+                    onChange={handleBackgroundUpload}
+                  />
+                  <p className="mt-3 text-sm leading-6 text-stone-700">
+                    Upload a PNG or JPG certificate background and preview it in
+                    the workspace without leaving the browser.
+                  </p>
+                  {backgroundState.isLoading ? (
+                    <p className="mt-3 text-sm font-medium text-stone-700">Loading image...</p>
+                  ) : null}
+                  {backgroundState.error ? (
+                    <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {backgroundState.error}
+                    </p>
+                  ) : null}
+                  {backgroundState.data ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-line bg-white px-3 py-3 text-sm text-stone-700 sm:col-span-2">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
+                          File
+                        </span>
+                        <span className="mt-2 block break-all">{backgroundState.data.fileName}</span>
+                      </div>
+                      <div className="rounded-xl border border-line bg-white px-3 py-3 text-sm text-stone-700">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
+                          Width
+                        </span>
+                        <span className="mt-2 block">{backgroundState.data.width}px</span>
+                      </div>
+                      <div className="rounded-xl border border-line bg-white px-3 py-3 text-sm text-stone-700">
+                        <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">
+                          Height
+                        </span>
+                        <span className="mt-2 block">{backgroundState.data.height}px</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border px-3 py-3 mt-2 text-sm border-line text-stone-700">
+                      <p className=" font-medium">No Image yet lol</p>
+                    </div>
+
+                  )}
+                </div>
+              </section>
+
+              <section>
                 <h2 className="text-lg font-semibold">CSV upload</h2>
                 <div className="mt-3 rounded-2xl border border-dashed border-line bg-panel p-4">
                   <label
-                    htmlFor={fileInputId}
+                    htmlFor={csvInputId}
                     className="inline-flex cursor-pointer rounded-full bg-ink px-4 py-2 text-sm font-medium text-white"
                   >
                     Choose CSV file
                   </label>
                   <input
-                    id={fileInputId}
+                    id={csvInputId}
                     type="file"
                     accept=".csv,text/csv"
                     className="sr-only"
@@ -321,18 +488,37 @@ export function GeneratorWorkspacePlaceholder() {
             </div>
 
             <div className="mt-5 flex min-h-[560px] items-center justify-center rounded-[1.5rem] border border-dashed border-stone-400/70 bg-white p-6">
-              <div className="flex aspect-[1.414/1] w-full max-w-3xl items-center justify-center rounded-[1.25rem] border border-line bg-canvas p-6 shadow-sm">
-                <div className="flex h-full w-full min-h-[420px] flex-col items-center justify-center rounded-[1rem] border border-dashed border-stone-300 bg-white px-10 py-12 text-center">
+              {backgroundState.data ? (
+                <div className="flex w-full max-w-4xl flex-col gap-4">
+                  <div className="rounded-2xl border border-line bg-white px-4 py-3 text-sm text-stone-700">
+                    Background preview: {backgroundState.data.fileName} ({backgroundState.data.width} x {backgroundState.data.height})
+                  </div>
+                  <div className="flex items-center justify-center overflow-auto rounded-[1.25rem] border border-line bg-canvas p-6 shadow-sm">
+                    <Image
+                      src={backgroundState.data.url}
+                      alt={backgroundState.data.fileName}
+                      width={backgroundState.data.width}
+                      height={backgroundState.data.height}
+                      unoptimized
+                      className="h-auto max-h-[640px] w-auto max-w-full object-contain"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-full w-full min-h-[420px] max-w-3xl flex-col items-center justify-center rounded-[1rem] border border-dashed border-stone-300 bg-white px-10 py-12 text-center">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-stone-500">
-                    Certificate canvas placeholder
+                    Certificate canvas empty state
                   </p>
-                  <p className="mt-6 text-4xl font-semibold">Recipient name</p>
-                  <p className="mt-4 text-lg text-stone-600">Course or award title</p>
-                  <p className="mt-14 text-sm text-stone-500">
-                    Issue date and certificate metadata
+                  <p className="mt-6 text-3xl font-semibold text-stone-800">
+                    Upload a PNG or JPG background to start the preview.
+                  </p>
+                  <p className="mt-4 max-w-xl text-sm leading-6 text-stone-600">
+                    The image will be loaded locally, measured in the browser,
+                    and shown here at its natural aspect ratio so future field
+                    overlays can align against it.
                   </p>
                 </div>
-              </div>
+              )}
             </div>
           </section>
 

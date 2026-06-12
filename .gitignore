@@ -7,5 +7,7 @@ dist/
 coverage/
 tsconfig.tsbuildinfo
 *.log
-.env
+.env.*
 .vscode
+
+docs/

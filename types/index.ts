@@ -13,3 +13,10 @@ export type ParsedCsvData = {
   columns: string[];
   rows: CsvRow[];
 };
+
+export type BackgroundImageData = {
+  fileName: string;
+  url: string;
+  width: number;
+  height: number;
+};

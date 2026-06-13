@@ -137,23 +137,35 @@ export function TextStyleControls({ style, onChange }: TextStyleControlsProps) {
         />
         Uppercase
       </label>
-      <label className="space-y-1 text-xs font-medium text-muted-foreground">
-        <span>Overflow mode</span>
-        <select
-          value={style.overflowMode}
-          onChange={(event) =>
-            patch({
-              overflowMode: event.target.value as TextBoxStyle["overflowMode"],
-            })
-          }
-          className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
-        >
-          <option value="shrinkToFit">Shrink to fit</option>
-          <option value="wrap">Wrap</option>
-          <option value="truncate">Truncate</option>
-          <option value="errorIfOverflow">Error if overflow</option>
-        </select>
-      </label>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">
+          <span>Overflow mode</span>
+          <select
+            value={style.overflowMode}
+            onChange={(event) =>
+              patch({
+                overflowMode: event.target.value as TextBoxStyle["overflowMode"],
+              })
+            }
+            className="mt-1 w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
+          >
+            <option value="shrinkToFit">Shrink to fit</option>
+            <option value="wrap">Wrap</option>
+            <option value="truncate">Truncate</option>
+            <option value="errorIfOverflow">Error if overflow</option>
+          </select>
+        </label>
+        <p className="text-xs leading-4 text-muted-foreground">
+          {style.overflowMode === "shrinkToFit" &&
+            "Tries smaller text sizes down to the minimum font size."}
+          {style.overflowMode === "wrap" &&
+            "Moves text onto multiple lines within the box."}
+          {style.overflowMode === "truncate" &&
+            "Cuts text with an ellipsis when it does not fit."}
+          {style.overflowMode === "errorIfOverflow" &&
+            "Blocks export unless the full text fits at the configured size."}
+        </p>
+      </div>
     </div>
   );
 }

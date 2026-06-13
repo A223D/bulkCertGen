@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { CustomDesignMetadataPanel } from "@/components/batch-pdf/custom/CustomDesignMetadataPanel";
+import { CustomPreflightPanel } from "@/components/batch-pdf/custom/CustomPreflightPanel";
 import { CustomDesignSetupPanel } from "@/components/batch-pdf/custom/CustomDesignSetupPanel";
 import {
   WorkflowModePicker,
@@ -551,13 +552,23 @@ export function BatchPdfClient() {
           {isCustomDesignMode ? (
             <>
               <CustomDesignMetadataPanel asset={session.customDesign.asset} />
+              {session.customDesign.asset &&
+              session.csv &&
+              session.customDesign.fieldBoxes.length > 0 ? (
+                <CustomPreflightPanel
+                  design={session.customDesign.asset}
+                  rows={session.csv.rows}
+                  csvHeaders={session.csv.headers}
+                  fieldBoxes={session.customDesign.fieldBoxes}
+                />
+              ) : null}
               <section className="rounded-lg border border-line bg-panel p-4">
                 <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   Export
                 </p>
-                <h2 className="mt-2 text-lg font-semibold">Custom export is locked</h2>
+                <h2 className="mt-2 text-lg font-semibold">Custom export is coming next</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Text fit checks and custom rendering are coming next. Your placed fields stay in this browser session for now.
+                  Place your field boxes and review preflight results above. Custom rendering will be enabled in the next phase.
                 </p>
                 <button
                   type="button"

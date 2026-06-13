@@ -28,6 +28,10 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getUploadErrorMessage(message: string): string {
+  return `${message} No batch was loaded or exported.`;
+}
+
 export function CsvUpload({ csv, onCsvParsed, onCsvReset }: CsvUploadProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [fileMeta, setFileMeta] = useState<FileMeta | null>(null);
@@ -60,7 +64,11 @@ export function CsvUpload({ csv, onCsvParsed, onCsvReset }: CsvUploadProps) {
     const fileValidation = validateCsvFile(file);
 
     if (!fileValidation.ok) {
-      setError(fileValidation.errors[0]?.message ?? "Unable to use this CSV file.");
+      setError(
+        getUploadErrorMessage(
+          fileValidation.errors[0]?.message ?? "Unable to use this CSV file.",
+        ),
+      );
       event.target.value = "";
       return;
     }
@@ -72,13 +80,21 @@ export function CsvUpload({ csv, onCsvParsed, onCsvReset }: CsvUploadProps) {
       const parsed = parseCsvText(text);
 
       if (!parsed.ok) {
-        setError(parsed.errors[0]?.message ?? "Unable to parse this CSV file.");
+        setError(
+          getUploadErrorMessage(
+            parsed.errors[0]?.message ?? "Unable to parse this CSV file.",
+          ),
+        );
         return;
       }
 
       onCsvParsed(parsed.value);
     } catch {
-      setError("Unable to read this CSV file. Try exporting it again.");
+      setError(
+        getUploadErrorMessage(
+          "Unable to read this CSV file. Try exporting it from your spreadsheet app again.",
+        ),
+      );
     } finally {
       setIsParsing(false);
       event.target.value = "";
@@ -108,7 +124,7 @@ export function CsvUpload({ csv, onCsvParsed, onCsvReset }: CsvUploadProps) {
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <label
           htmlFor="batch-pdf-csv-upload"
-          className="inline-flex w-fit cursor-pointer rounded-lg bg-ink px-4 py-2 text-sm font-medium text-panel hover:bg-accent"
+          className="inline-flex w-fit cursor-pointer rounded-lg bg-ink px-4 py-2 text-sm font-medium text-panel hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           Choose CSV
         </label>
@@ -119,6 +135,7 @@ export function CsvUpload({ csv, onCsvParsed, onCsvReset }: CsvUploadProps) {
           accept=".csv,text/csv"
           className="sr-only"
           onChange={handleUpload}
+          aria-describedby="batch-pdf-csv-help"
         />
         {csv || fileMeta ? (
           <button
@@ -130,6 +147,10 @@ export function CsvUpload({ csv, onCsvParsed, onCsvReset }: CsvUploadProps) {
           </button>
         ) : null}
       </div>
+      <p id="batch-pdf-csv-help" className="mt-3 text-xs leading-5 text-muted-foreground">
+        Use a `.csv` file with one header row. Rows are sent to the server only
+        when you click Generate free ZIP.
+      </p>
 
       {fileMeta ? (
         <div className="mt-4 rounded-lg border border-line bg-muted p-3 text-sm text-muted-foreground">
@@ -139,11 +160,16 @@ export function CsvUpload({ csv, onCsvParsed, onCsvReset }: CsvUploadProps) {
       ) : null}
 
       {isParsing ? (
-        <p className="mt-4 text-sm font-medium text-muted-foreground">Parsing CSV...</p>
+        <p className="mt-4 text-sm font-medium text-muted-foreground" role="status">
+          Reading your CSV...
+        </p>
       ) : null}
 
       {error ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div
+          className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          role="alert"
+        >
           {error}
         </div>
       ) : null}
@@ -164,6 +190,10 @@ export function CsvUpload({ csv, onCsvParsed, onCsvReset }: CsvUploadProps) {
               <p className="mt-1 text-2xl font-semibold">{csv.headers.length}</p>
             </div>
           </div>
+          <p className="text-sm leading-6 text-muted-foreground" role="status">
+            CSV loaded for this session. Choose a template next, or clear the
+            upload to start over.
+          </p>
 
           <div className="overflow-hidden rounded-lg border border-line">
             <div className="overflow-x-auto">

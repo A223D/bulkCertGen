@@ -14,7 +14,9 @@ import {
   getMissingValueWarnings,
   validateMapping,
 } from "@/lib/batch-pdf/mapping";
+import { parseCsvText } from "@/lib/batch-pdf/csv";
 import { clampPreviewRowIndex } from "@/lib/batch-pdf/preview";
+import { getSampleCsvByTemplateId } from "@/lib/batch-pdf/sample-csv";
 import {
   getTemplateById,
 } from "@/lib/batch-pdf/template-registry";
@@ -41,6 +43,7 @@ export function BatchPdfClient() {
     mapping: {},
     previewRowIndex: 0,
   });
+  const [sampleError, setSampleError] = useState<string | null>(null);
   const selectedTemplate = getTemplateById(session.selectedTemplateId ?? "");
   const hasCsv = Boolean(session.csv);
   const mappingValidation =
@@ -92,6 +95,7 @@ export function BatchPdfClient() {
   ];
 
   function handleCsvParsed(csv: CsvParseResult) {
+    setSampleError(null);
     setSession((current) => ({
       ...current,
       step: "template",
@@ -103,6 +107,7 @@ export function BatchPdfClient() {
   }
 
   function handleCsvReset() {
+    setSampleError(null);
     setSession((current) => ({
       ...current,
       step: "upload",
@@ -114,6 +119,7 @@ export function BatchPdfClient() {
   }
 
   function handleSelectTemplate(templateId: string) {
+    setSampleError(null);
     if (!session.csv) {
       return;
     }
@@ -129,6 +135,33 @@ export function BatchPdfClient() {
       step: "mapping",
       selectedTemplateId: templateId,
       mapping: autoMapFields(template, session.csv?.headers ?? []),
+      previewRowIndex: 0,
+    }));
+  }
+
+  function handleLoadSample(templateId: string) {
+    const template = getTemplateById(templateId);
+    const sample = getSampleCsvByTemplateId(templateId);
+
+    if (!template || !sample) {
+      setSampleError("Sample data is not available for this template.");
+      return;
+    }
+
+    const parsed = parseCsvText(sample.csv);
+
+    if (!parsed.ok) {
+      setSampleError("We could not load this sample CSV. Try downloading it instead.");
+      return;
+    }
+
+    setSampleError(null);
+    setSession((current) => ({
+      ...current,
+      step: "mapping",
+      csv: parsed.value,
+      selectedTemplateId: template.id,
+      mapping: autoMapFields(template, parsed.value.headers),
       previewRowIndex: 0,
     }));
   }
@@ -232,14 +265,13 @@ export function BatchPdfClient() {
               Batch PDF builder
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Upload a CSV, confirm the parsed rows and columns, then choose a
-              starter template. Map required fields before continuing to the
-              preview placeholder.
+              Upload a CSV, choose a template, map your columns, preview your
+              documents, and download a ZIP of PDFs.
             </p>
           </div>
           <div className="rounded-lg border border-line bg-muted px-4 py-3 text-sm leading-6 text-muted-foreground">
-            Your CSV will be used only to generate PDFs. Uploaded spreadsheets
-            and generated files will not be stored.
+            Your CSV is used only for the current batch. We do not store
+            uploaded spreadsheets or generated PDF files.
           </div>
         </div>
       </section>
@@ -254,7 +286,10 @@ export function BatchPdfClient() {
             onCsvReset={handleCsvReset}
           />
 
-          <SampleCsvLinks />
+          <SampleCsvLinks
+            onLoadSample={handleLoadSample}
+            loadError={sampleError}
+          />
 
           <TemplatePicker
             selectedTemplateId={session.selectedTemplateId ?? ""}

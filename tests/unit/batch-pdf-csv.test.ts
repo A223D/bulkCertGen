@@ -176,6 +176,13 @@ describe("sample CSVs", () => {
     }
   });
 
+  it("uses safe and obvious sample CSV filenames", () => {
+    for (const sample of getAllSampleCsvs()) {
+      expect(sample.fileName).toMatch(/^[a-z0-9-]+-sample\.csv$/);
+      expect(sample.fileName).toContain(sample.templateId);
+    }
+  });
+
   it("includes headers that can reasonably map to required template fields", () => {
     for (const template of getAllTemplates()) {
       const sample = getSampleCsvByTemplateId(template.id);

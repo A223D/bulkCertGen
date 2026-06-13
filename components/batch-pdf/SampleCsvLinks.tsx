@@ -1,7 +1,15 @@
 import { getAllSampleCsvs } from "@/lib/batch-pdf/sample-csv";
 import { assertTemplateExists } from "@/lib/batch-pdf/template-registry";
 
-export function SampleCsvLinks() {
+type SampleCsvLinksProps = {
+  onLoadSample?: (templateId: string) => void;
+  loadError?: string | null;
+};
+
+export function SampleCsvLinks({
+  onLoadSample,
+  loadError = null,
+}: SampleCsvLinksProps) {
   const samples = getAllSampleCsvs();
 
   return (
@@ -10,26 +18,55 @@ export function SampleCsvLinks() {
         Sample CSVs
       </p>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Download a small CSV that matches one of the starter templates, then
-        upload it above to test the import flow.
+        Download a matching CSV or load sample rows directly to try the flow.
+        Sample data stays in this browser session until you export.
       </p>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {samples.map((sample) => {
           const template = assertTemplateExists(sample.templateId);
 
           return (
-            <a
+            <div
               key={sample.templateId}
-              href={`data:text/csv;charset=utf-8,${encodeURIComponent(sample.csv)}`}
-              download={sample.fileName}
-              className="rounded-full border border-line bg-muted px-3 py-2 text-xs font-medium text-muted-foreground hover:border-accent hover:text-accent"
-              type="text/csv;charset=utf-8"
+              className="rounded-lg border border-line bg-muted p-3"
             >
-              {template.shortName} sample
-            </a>
+              <p className="text-sm font-semibold text-ink">
+                {template.shortName}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {sample.fileName}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {onLoadSample ? (
+                  <button
+                    type="button"
+                    onClick={() => onLoadSample(sample.templateId)}
+                    className="rounded-lg bg-ink px-3 py-2 text-xs font-medium text-panel hover:bg-accent"
+                  >
+                    Try sample
+                  </button>
+                ) : null}
+                <a
+                  href={`data:text/csv;charset=utf-8,${encodeURIComponent(sample.csv)}`}
+                  download={sample.fileName}
+                  className="rounded-lg border border-line bg-panel px-3 py-2 text-xs font-medium text-muted-foreground hover:border-accent hover:text-accent"
+                  type="text/csv;charset=utf-8"
+                >
+                  Download CSV
+                </a>
+              </div>
+            </div>
           );
         })}
       </div>
+      {loadError ? (
+        <p
+          className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          role="alert"
+        >
+          {loadError}
+        </p>
+      ) : null}
     </section>
   );
 }

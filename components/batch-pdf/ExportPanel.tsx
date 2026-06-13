@@ -33,6 +33,9 @@ export function ExportPanel({
   const rowCount = rows.length;
   const freeRows = Math.min(rowCount, BATCH_PDF_LIMITS.freeExportRows);
   const canExport = enabled && Boolean(templateId) && rowCount > 0 && status !== "loading";
+  const disabledReason = rowCount === 0
+    ? "Upload a CSV before exporting."
+    : "Complete mapping and preview before exporting.";
 
   async function handleGenerateFreeZip() {
     if (!canExport || !templateId) {
@@ -57,22 +60,19 @@ export function ExportPanel({
       });
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(
-          typeof payload?.error === "string"
-            ? payload.error
-            : "Unable to generate this ZIP.",
+        setStatus("error");
+        setError(
+          "We could not generate this ZIP. Your export request was received, but no ZIP was downloaded. Check your mapping and try again.",
         );
+        return;
       }
 
       downloadZip(await response.blob());
       setStatus("success");
-    } catch (caughtError) {
+    } catch {
       setStatus("error");
       setError(
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unable to generate this ZIP.",
+        "We could not reach the export service. No ZIP was downloaded. Check your connection and try again.",
       );
     }
   }
@@ -84,7 +84,8 @@ export function ExportPanel({
       </p>
       <h2 className="mt-2 text-lg font-semibold">Free export</h2>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Generate the first {BATCH_PDF_LIMITS.freeExportRows} PDFs in this batch.
+        Generate a ZIP with up to {BATCH_PDF_LIMITS.freeExportRows} PDFs from
+        the current batch.
       </p>
       {rowCount > 0 ? (
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -108,15 +109,35 @@ export function ExportPanel({
             : "cursor-not-allowed bg-disabled text-disabled-foreground",
         ].join(" ")}
       >
-        {status === "loading" ? "Generating ZIP..." : "Generate free ZIP"}
+        {status === "loading" ? "Generating PDFs..." : "Generate free ZIP"}
       </button>
+      {!canExport && status !== "loading" ? (
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          {disabledReason}
+        </p>
+      ) : null}
+      {status === "loading" ? (
+        <div
+          className="mt-3 rounded-lg border border-line bg-muted px-3 py-2 text-sm text-muted-foreground"
+          role="status"
+        >
+          <p className="font-medium text-ink">Generating your PDFs...</p>
+          <p className="mt-1">This may take a few seconds for larger batches.</p>
+        </div>
+      ) : null}
       {status === "success" ? (
-        <p className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
-          ZIP generated and downloaded.
+        <p
+          className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700"
+          role="status"
+        >
+          Your ZIP is ready. If the download did not start, try again.
         </p>
       ) : null}
       {status === "error" && error ? (
-        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}

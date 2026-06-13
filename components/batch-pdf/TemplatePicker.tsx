@@ -24,6 +24,10 @@ export function TemplatePicker({
         <h2 id="template-picker-heading" className="mt-2 text-xl font-semibold">
           Choose a fixed layout
         </h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+          Pick the template that matches your batch. The next step will map your
+          CSV columns to the template fields.
+        </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -36,6 +40,7 @@ export function TemplatePicker({
               key={template.id}
               type="button"
               disabled={disabled}
+              aria-pressed={isSelected}
               onClick={() => onSelectTemplate(template.id)}
               className={[
                 "rounded-lg border p-4 text-left transition-colors",
@@ -71,7 +76,7 @@ export function TemplatePicker({
       </div>
       {disabled ? (
         <p className="text-sm leading-6 text-muted-foreground">
-          Upload a valid CSV before choosing a template.
+          Upload a valid CSV or load sample data before choosing a template.
         </p>
       ) : null}
     </section>

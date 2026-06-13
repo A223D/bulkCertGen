@@ -34,8 +34,8 @@ export function ValidationSummary({
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
               Template: {templateName}.{" "}
               {isMappingValid
-                ? "Required fields are mapped."
-                : "Required fields still need attention."}
+                ? "Required fields are mapped. Preview is ready."
+                : "Required fields still need attention before preview and export."}
             </p>
           ) : null}
           {errors.length > 0 ? (
@@ -44,6 +44,7 @@ export function ValidationSummary({
                 <p
                   key={`${error.code}-${error.fieldKey ?? "general"}`}
                   className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                  role="alert"
                 >
                   {error.message}
                 </p>
@@ -56,6 +57,7 @@ export function ValidationSummary({
                 <p
                   key={`${warning.code}-${warning.fieldKey ?? "general"}`}
                   className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+                  role="status"
                 >
                   {warning.message}
                 </p>

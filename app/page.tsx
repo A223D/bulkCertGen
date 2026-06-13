@@ -1,6 +1,19 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { getAllTemplates } from "@/lib/batch-pdf/template-registry";
+import { BATCH_PDF_LIMITS } from "@/lib/batch-pdf/limits";
+
+export const metadata: Metadata = {
+  title: "CSV to PDF Generator | Very Simple Batch PDF",
+  description:
+    "Upload a CSV, choose a template, and generate certificates, labels, badges, cards, or simple PDFs in bulk.",
+  openGraph: {
+    title: "CSV to PDF Generator | Very Simple Batch PDF",
+    description:
+      "Upload a CSV, choose a template, map your columns, preview your documents, and download a ZIP of PDFs.",
+  },
+};
 
 const workflowSteps = [
   "Upload a CSV with a header row",
@@ -8,6 +21,50 @@ const workflowSteps = [
   "Map spreadsheet columns to document fields",
   "Preview a row before export",
   "Generate a ZIP of PDFs",
+];
+
+const faqs = [
+  {
+    question: "What is a CSV?",
+    answer:
+      "A CSV is a spreadsheet file that stores rows and columns. Most spreadsheet apps, including Excel and Google Sheets, can export CSV files.",
+  },
+  {
+    question: "Do you store my spreadsheet?",
+    answer:
+      "No. Your CSV is used only for the current batch. We do not store uploaded spreadsheets or generated PDF files.",
+  },
+  {
+    question: "How many PDFs can I generate for free?",
+    answer: `You can generate up to ${BATCH_PDF_LIMITS.freeExportRows} PDFs per batch for free.`,
+  },
+  {
+    question: "Why are there fixed templates?",
+    answer:
+      "Fixed templates keep the first version predictable: upload, map, preview, and export without designing a layout from scratch.",
+  },
+  {
+    question: "Can I use my own design?",
+    answer: "Not yet. Custom designs are planned for a later version.",
+  },
+  {
+    question: "Can I add my logo?",
+    answer: "Not yet. Logo upload is not available in the free test version.",
+  },
+  {
+    question: "What happens if my text is too long?",
+    answer:
+      "The templates wrap text where practical, but very long values may still need shorter spreadsheet text before export.",
+  },
+  {
+    question: "Can I generate more than 10 PDFs?",
+    answer: "Not yet. Full-batch export is planned next.",
+  },
+  {
+    question: "What templates are available?",
+    answer:
+      "The first templates are certificates, name badges, mailing labels, and appointment cards.",
+  },
 ];
 
 export default function HomePage() {
@@ -25,8 +82,8 @@ export default function HomePage() {
               Turn a spreadsheet into PDFs in minutes.
             </h1>
             <p className="max-w-xl text-base leading-7 text-stone-700 sm:text-lg">
-              Upload a CSV, choose a template, map your columns, and generate
-              certificates, labels, badges, cards, or simple documents in bulk.
+              Upload a CSV, choose a template, map your columns, preview your
+              documents, and download a ZIP of PDFs.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -84,8 +141,8 @@ export default function HomePage() {
           </p>
           <h2 className="mt-2 text-2xl font-semibold">Pick the document shape first.</h2>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Template metadata drives the picker, field list, validation, sample
-            CSVs, preview labels, and future PDF renderers.
+            Each template has a matching sample CSV, required fields, preview,
+            and PDF renderer.
           </p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -118,9 +175,9 @@ export default function HomePage() {
           </p>
           <h2 className="mt-2 text-2xl font-semibold">Start free, expand later.</h2>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            The planned free flow generates up to 10 PDFs per batch. A later
-            one-time full-batch export can unlock larger runs without accounts
-            or subscriptions.
+            Generate up to {BATCH_PDF_LIMITS.freeExportRows} PDFs per batch for
+            free. Full-batch export is planned next, but there is no payment
+            flow yet.
           </p>
         </div>
         <div className="rounded-lg border border-line bg-panel p-5">
@@ -129,7 +186,7 @@ export default function HomePage() {
           </p>
           <h2 className="mt-2 text-2xl font-semibold">Built for single-session work.</h2>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Your CSV is used only to generate your PDFs. We do not store
+            Your CSV is used only for the current batch. We do not store
             uploaded spreadsheets or generated PDF files.
           </p>
         </div>
@@ -137,27 +194,23 @@ export default function HomePage() {
 
       <section className="space-y-4" aria-label="FAQ">
         <h2 className="text-2xl font-semibold">FAQ</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-line bg-panel p-5">
-            <h3 className="font-semibold">What is a CSV?</h3>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              A CSV is a spreadsheet export where each row becomes one document.
-            </p>
-          </div>
-          <div className="rounded-lg border border-line bg-panel p-5">
-            <h3 className="font-semibold">Can I use my own design?</h3>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Not in the MVP. Fixed templates keep generation reliable and fast.
-            </p>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {faqs.map((faq) => (
+            <div key={faq.question} className="rounded-lg border border-line bg-panel p-5">
+              <h3 className="font-semibold">{faq.question}</h3>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {faq.answer}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 
       <section className="rounded-lg border border-line bg-ink p-6 text-panel">
         <h2 className="text-2xl font-semibold">Create your first batch.</h2>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-panel/80">
-          The Phase 1 shell is ready for template selection. CSV upload and PDF
-          export will be added in later phases.
+          Start with your own CSV or use a sample file to test the full free
+          flow.
         </p>
         <Link
           href="/create"

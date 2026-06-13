@@ -56,6 +56,9 @@ export function PreviewPanel({
           <h2 className="mt-2 text-xl font-semibold">
             {template?.name ?? "Template preview"}
           </h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Preview one mapped row before generating files.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -93,6 +96,7 @@ export function PreviewPanel({
             <p
               key={`${error.code}-${error.fieldKey ?? "general"}`}
               className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+              role="alert"
             >
               {error.message}
             </p>
@@ -101,6 +105,7 @@ export function PreviewPanel({
             <p
               key={`${warning.code}-${warning.fieldKey ?? "general"}`}
               className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+              role="status"
             >
               {warning.message}
             </p>
@@ -109,20 +114,25 @@ export function PreviewPanel({
       ) : null}
 
       {!template || !mappingReady ? (
-        <div className="mt-5 flex min-h-72 items-center justify-center rounded-lg border border-dashed border-line bg-muted p-6">
-          <div className="w-full max-w-md rounded-lg border border-line bg-panel p-6 text-center">
-            <p className="text-sm font-semibold text-ink">
-              {template ? template.name : "No template selected"}
-            </p>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Map required fields before preview is available.
-            </p>
+        <div className="mt-5 flex min-h-72 items-center justify-center rounded-lg border border-dashed border-line bg-muted p-6 text-center">
+          <div className="w-full max-w-md">
+          <p className="text-sm font-semibold text-ink">
+            {template ? template.name : "No template selected"}
+          </p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {template
+              ? "Map required fields before preview is available."
+              : "Upload a CSV and choose a template to unlock preview."}
+          </p>
           </div>
         </div>
       ) : null}
 
       {previewResult && !previewResult.ok ? (
-        <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div
+          className="mt-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          role="alert"
+        >
           {previewResult.errors[0]?.message ?? "Preview is unavailable."}
         </div>
       ) : null}

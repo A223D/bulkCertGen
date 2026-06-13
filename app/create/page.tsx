@@ -3,9 +3,14 @@ import { AppShell } from "@/components/app-shell";
 import { BatchPdfClient } from "./BatchPdfClient";
 
 export const metadata: Metadata = {
-  title: "Create PDFs | Very Simple Batch PDF",
+  title: "Create Batch PDFs | Very Simple Batch PDF",
   description:
-    "Choose a starter template and prepare the CSV to PDF generation flow.",
+    "Upload a CSV, choose a template, map columns, preview rows, and generate a free ZIP of up to 10 PDFs.",
+  openGraph: {
+    title: "Create Batch PDFs | Very Simple Batch PDF",
+    description:
+      "Upload a CSV, choose a template, map columns, preview rows, and generate a free ZIP of PDFs.",
+  },
 };
 
 export default function CreatePage() {

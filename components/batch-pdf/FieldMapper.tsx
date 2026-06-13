@@ -46,9 +46,14 @@ export function FieldMapper({
             Connect CSV columns to {template.shortName} fields
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Auto-mapping uses the template registry aliases. Review each match
-            before moving to preview.
+            Auto-mapping uses template aliases. Review each match before moving
+            to preview.
           </p>
+          {!isValid ? (
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Continue is disabled until every required field has a CSV column.
+            </p>
+          ) : null}
         </div>
         <button
           type="button"
@@ -99,6 +104,12 @@ export function FieldMapper({
                   <select
                     value={mapping[field.key] ?? ""}
                     onChange={(event) => onMappingChange(field.key, event.target.value)}
+                    aria-invalid={fieldErrors.length > 0}
+                    aria-describedby={
+                      fieldErrors.length > 0 || fieldWarnings.length > 0
+                        ? `${field.key}-messages`
+                        : undefined
+                    }
                     className="mt-2 w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink outline-none focus:border-accent"
                   >
                     <option value="">
@@ -114,11 +125,12 @@ export function FieldMapper({
               </div>
 
               {fieldErrors.length > 0 || fieldWarnings.length > 0 ? (
-                <div className="mt-4 space-y-2">
+                <div id={`${field.key}-messages`} className="mt-4 space-y-2">
                   {fieldErrors.map((error) => (
                     <p
                       key={`${field.key}-${error.code}-${error.message}`}
                       className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                      role="alert"
                     >
                       {error.message}
                     </p>
@@ -127,6 +139,7 @@ export function FieldMapper({
                     <p
                       key={`${field.key}-${warning.code}-${warning.message}`}
                       className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+                      role="status"
                     >
                       {warning.message}
                     </p>

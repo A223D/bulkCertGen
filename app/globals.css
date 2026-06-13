@@ -33,6 +33,11 @@ a {
   @apply transition-colors;
 }
 
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 ::selection {
   @apply bg-accent text-accent-contrast;
 }

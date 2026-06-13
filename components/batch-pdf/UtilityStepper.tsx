@@ -26,6 +26,7 @@ export function UtilityStepper({ currentStepId, steps }: UtilityStepperProps) {
               key={step.id}
               className={[
                 "flex min-h-14 items-center gap-3 rounded-lg border border-line bg-panel px-3 py-2",
+                isCurrent ? "border-accent" : "",
                 isDisabled ? "opacity-55" : "",
               ].join(" ")}
               aria-current={isCurrent ? "step" : undefined}
@@ -38,16 +39,26 @@ export function UtilityStepper({ currentStepId, steps }: UtilityStepperProps) {
                     ? "bg-accent text-accent-contrast"
                     : "bg-muted text-muted-foreground",
                 ].join(" ")}
+                aria-label={
+                  isComplete
+                    ? `Step ${index + 1} complete`
+                    : `Step ${index + 1}`
+                }
               >
                 {index + 1}
               </span>
-              <span
-                className={[
-                  "text-sm font-medium leading-5",
-                  isCurrent && !isDisabled ? "text-ink" : "text-muted-foreground",
-                ].join(" ")}
-              >
-                {step.label}
+              <span>
+                <span
+                  className={[
+                    "block text-sm font-medium leading-5",
+                    isCurrent && !isDisabled ? "text-ink" : "text-muted-foreground",
+                  ].join(" ")}
+                >
+                  {step.label}
+                </span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {isCurrent ? "Current" : isComplete ? "Complete" : isDisabled ? "Locked" : "Ready"}
+                </span>
               </span>
             </li>
           );

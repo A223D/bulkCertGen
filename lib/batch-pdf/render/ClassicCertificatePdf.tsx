@@ -30,11 +30,19 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 34,
     color: "#1f1b16",
+    lineHeight: 1.15,
+  },
+  nameCompact: {
+    fontSize: 28,
   },
   course: {
     fontSize: 22,
     color: "#1f1b16",
     marginTop: 8,
+    lineHeight: 1.2,
+  },
+  courseCompact: {
+    fontSize: 18,
   },
   footer: {
     width: "100%",
@@ -46,6 +54,9 @@ const styles = StyleSheet.create({
 });
 
 export function ClassicCertificatePdf({ data }: { data: MappedDocumentData }) {
+  const name = getPdfValue(data, "name");
+  const course = getPdfValue(data, "course");
+
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
@@ -55,11 +66,15 @@ export function ClassicCertificatePdf({ data }: { data: MappedDocumentData }) {
           </View>
           <View>
             <Text style={styles.label}>Presented to</Text>
-            <Text style={styles.name}>{getPdfValue(data, "name")}</Text>
+            <Text style={[styles.name, name.length > 34 ? styles.nameCompact : {}]}>
+              {name}
+            </Text>
           </View>
           <View>
             <Text style={styles.label}>for</Text>
-            <Text style={styles.course}>{getPdfValue(data, "course")}</Text>
+            <Text style={[styles.course, course.length > 58 ? styles.courseCompact : {}]}>
+              {course}
+            </Text>
           </View>
           <View style={styles.footer}>
             <Text>Date: {getPdfValue(data, "date")}</Text>

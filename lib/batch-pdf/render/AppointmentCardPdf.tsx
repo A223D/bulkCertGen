@@ -25,6 +25,10 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: "#1f1b16",
     marginBottom: 18,
+    lineHeight: 1.15,
+  },
+  nameCompact: {
+    fontSize: 18,
   },
   block: {
     border: "1 solid #e6ddce",
@@ -41,18 +45,26 @@ const styles = StyleSheet.create({
   blockText: {
     fontSize: 12,
     color: "#1f1b16",
+    lineHeight: 1.35,
+  },
+  blockTextCompact: {
+    fontSize: 10,
   },
 });
 
 export function AppointmentCardPdf({ data }: { data: MappedDocumentData }) {
-  const notes = data.notes?.trim() || "Optional details not provided.";
+  const name = getPdfValue(data, "name");
+  const location = getPdfValue(data, "location");
+  const notes = data.notes?.trim();
 
   return (
     <Document>
       <Page size="A6" style={styles.page}>
         <View style={styles.card}>
           <Text style={styles.label}>Appointment Reminder</Text>
-          <Text style={styles.name}>{getPdfValue(data, "name")}</Text>
+          <Text style={[styles.name, name.length > 30 ? styles.nameCompact : {}]}>
+            {name}
+          </Text>
           <View style={styles.block}>
             <Text style={styles.blockLabel}>Date and time</Text>
             <Text style={styles.blockText}>
@@ -61,12 +73,18 @@ export function AppointmentCardPdf({ data }: { data: MappedDocumentData }) {
           </View>
           <View style={styles.block}>
             <Text style={styles.blockLabel}>Location</Text>
-            <Text style={styles.blockText}>{getPdfValue(data, "location")}</Text>
+            <Text style={[styles.blockText, location.length > 70 ? styles.blockTextCompact : {}]}>
+              {location}
+            </Text>
           </View>
-          <View style={styles.block}>
-            <Text style={styles.blockLabel}>Notes</Text>
-            <Text style={styles.blockText}>{notes}</Text>
-          </View>
+          {notes ? (
+            <View style={styles.block}>
+              <Text style={styles.blockLabel}>Notes</Text>
+              <Text style={[styles.blockText, notes.length > 90 ? styles.blockTextCompact : {}]}>
+                {notes}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </Page>
     </Document>

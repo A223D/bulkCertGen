@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { CsvUpload } from "@/components/batch-pdf/CsvUpload";
 import { ExportPanel } from "@/components/batch-pdf/ExportPanel";
 import { FieldMapper } from "@/components/batch-pdf/FieldMapper";
@@ -14,8 +14,8 @@ import {
   getMissingValueWarnings,
   validateMapping,
 } from "@/lib/batch-pdf/mapping";
+import { clampPreviewRowIndex } from "@/lib/batch-pdf/preview";
 import {
-  getAllTemplates,
   getTemplateById,
 } from "@/lib/batch-pdf/template-registry";
 import type {
@@ -34,7 +34,6 @@ type BatchPdfSessionState = {
 };
 
 export function BatchPdfClient() {
-  const firstTemplateId = useMemo(() => getAllTemplates()[0]?.id ?? "", []);
   const [session, setSession] = useState<BatchPdfSessionState>({
     step: "upload",
     csv: null,
@@ -61,7 +60,7 @@ export function BatchPdfClient() {
       : [];
   const isMappingValid = Boolean(mappingValidation?.ok);
   const hasSelectedTemplate = Boolean(selectedTemplate);
-  const isPreviewAvailable = session.step === "preview" || session.step === "export";
+  const isPreviewAvailable = isMappingValid && session.step === "preview";
   const steps = [
     { id: "upload", label: "Upload CSV", complete: hasCsv },
     {
@@ -76,7 +75,12 @@ export function BatchPdfClient() {
       disabled: !hasSelectedTemplate,
       complete: isMappingValid,
     },
-    { id: "preview", label: "Preview", disabled: !isPreviewAvailable },
+    {
+      id: "preview",
+      label: "Preview",
+      disabled: !isMappingValid,
+      complete: isPreviewAvailable,
+    },
     { id: "export", label: "Export", disabled: true },
   ];
 
@@ -134,22 +138,63 @@ export function BatchPdfClient() {
 
       return {
         ...current,
-        step: "mapping",
+        step: current.step === "preview" ? "preview" : "mapping",
         mapping: nextMapping,
-        previewRowIndex: 0,
       };
     });
   }
 
   function handleContinueToPreview() {
-    if (!isMappingValid) {
+    if (!isMappingValid || !session.csv) {
       return;
     }
 
     setSession((current) => ({
       ...current,
       step: "preview",
-      previewRowIndex: 0,
+      previewRowIndex: clampPreviewRowIndex(
+        current.previewRowIndex,
+        session.csv?.rows.length ?? 0,
+      ),
+    }));
+  }
+
+  function handlePreviousPreviewRow() {
+    if (!session.csv) {
+      return;
+    }
+
+    setSession((current) => ({
+      ...current,
+      previewRowIndex: clampPreviewRowIndex(
+        current.previewRowIndex - 1,
+        session.csv?.rows.length ?? 0,
+      ),
+    }));
+  }
+
+  function handleNextPreviewRow() {
+    if (!session.csv) {
+      return;
+    }
+
+    setSession((current) => ({
+      ...current,
+      previewRowIndex: clampPreviewRowIndex(
+        current.previewRowIndex + 1,
+        session.csv?.rows.length ?? 0,
+      ),
+    }));
+  }
+
+  function handleBackToMapping() {
+    if (!selectedTemplate) {
+      return;
+    }
+
+    setSession((current) => ({
+      ...current,
+      step: "mapping",
     }));
   }
 
@@ -218,9 +263,16 @@ export function BatchPdfClient() {
             isMappingValid={isMappingValid}
           />
           <PreviewPanel
-            templateName={selectedTemplate?.name ?? "Template"}
-            mappingReady={isMappingValid}
-            isActive={session.step === "preview"}
+            template={selectedTemplate}
+            rows={session.csv?.rows ?? []}
+            mapping={session.mapping}
+            previewRowIndex={session.previewRowIndex}
+            mappingReady={isMappingValid && session.step === "preview"}
+            errors={mappingErrors}
+            warnings={missingValueWarnings}
+            onPreviousRow={handlePreviousPreviewRow}
+            onNextRow={handleNextPreviewRow}
+            onBackToMapping={handleBackToMapping}
           />
           <ExportPanel />
         </aside>

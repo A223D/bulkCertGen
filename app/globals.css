@@ -12,13 +12,14 @@
   --color-accent-contrast: oklch(0.99 0.006 85);
   --color-disabled: oklch(0.82 0.012 80);
   --color-disabled-foreground: oklch(0.48 0.018 75);
+
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: var(--font-dm-serif), ui-serif, Georgia, serif;
+  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
   color-scheme: light;
-  font-family:
-    "Segoe UI", "Helvetica Neue", Helvetica, Arial, ui-sans-serif, system-ui,
-    sans-serif;
 }
 
 html {

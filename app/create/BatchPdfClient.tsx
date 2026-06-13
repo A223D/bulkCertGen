@@ -1,6 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { CustomDesignMetadataPanel } from "@/components/batch-pdf/custom/CustomDesignMetadataPanel";
+import { CustomDesignSetupPanel } from "@/components/batch-pdf/custom/CustomDesignSetupPanel";
+import {
+  WorkflowModePicker,
+  type BatchPdfWorkflowMode,
+} from "@/components/batch-pdf/custom/WorkflowModePicker";
 import { CsvUpload } from "@/components/batch-pdf/CsvUpload";
 import { ExportPanel } from "@/components/batch-pdf/ExportPanel";
 import { FieldMapper } from "@/components/batch-pdf/FieldMapper";
@@ -20,34 +26,50 @@ import { getSampleCsvByTemplateId } from "@/lib/batch-pdf/sample-csv";
 import {
   getTemplateById,
 } from "@/lib/batch-pdf/template-registry";
+import {
+  createEmptyCustomDesignState,
+  isCustomDesignPreviewReady,
+  resetCustomDesignState,
+  type CustomDesignPreviewStatus,
+  type CustomDesignState,
+} from "@/lib/batch-pdf/custom/design-upload-state";
 import type {
+  BatchPdfError,
   CsvParseResult,
   FieldMapping,
 } from "@/lib/batch-pdf/types";
+import type { DesignAsset } from "@/lib/batch-pdf/custom/types";
 
 type BatchPdfStep = "upload" | "template" | "mapping" | "preview" | "export";
 
 type BatchPdfSessionState = {
   step: BatchPdfStep;
+  workflowMode: BatchPdfWorkflowMode | null;
   csv: CsvParseResult | null;
   selectedTemplateId: string | null;
   mapping: FieldMapping;
   previewRowIndex: number;
+  customDesign: CustomDesignState;
 };
 
 export function BatchPdfClient() {
   const [session, setSession] = useState<BatchPdfSessionState>({
     step: "upload",
+    workflowMode: null,
     csv: null,
     selectedTemplateId: null,
     mapping: {},
     previewRowIndex: 0,
+    customDesign: createEmptyCustomDesignState(),
   });
   const [sampleError, setSampleError] = useState<string | null>(null);
   const selectedTemplate = getTemplateById(session.selectedTemplateId ?? "");
+  const isStarterTemplateMode = session.workflowMode === "starterTemplate";
+  const isCustomDesignMode = session.workflowMode === "customDesign";
   const hasCsv = Boolean(session.csv);
+  const customDesignPreviewReady = isCustomDesignPreviewReady(session.customDesign);
   const mappingValidation =
-    selectedTemplate && session.csv
+    isStarterTemplateMode && selectedTemplate && session.csv
       ? validateMapping(selectedTemplate, session.csv.headers, session.mapping)
       : null;
   const mappingErrors = mappingValidation && !mappingValidation.ok
@@ -62,35 +84,40 @@ export function BatchPdfClient() {
         )
       : [];
   const isMappingValid = Boolean(mappingValidation?.ok);
-  const hasSelectedTemplate = Boolean(selectedTemplate);
+  const hasSelectedTemplate = isStarterTemplateMode && Boolean(selectedTemplate);
   const isPreviewAvailable =
     isMappingValid && (session.step === "preview" || session.step === "export");
   const isExportAvailable = isMappingValid && session.step === "export";
+  const currentStepId =
+    isCustomDesignMode && customDesignPreviewReady ? "preview" : session.step;
+  const chooseDesignComplete = isStarterTemplateMode
+    ? hasSelectedTemplate
+    : isCustomDesignMode && Boolean(session.customDesign.asset);
   const steps = [
     { id: "upload", label: "Upload CSV", complete: hasCsv },
     {
       id: "template",
-      label: "Choose template",
+      label: "Choose design",
       disabled: !hasCsv,
-      complete: hasSelectedTemplate,
+      complete: chooseDesignComplete,
     },
     {
       id: "mapping",
-      label: "Map fields",
-      disabled: !hasSelectedTemplate,
-      complete: isMappingValid,
+      label: "Add fields",
+      disabled: isCustomDesignMode || !hasSelectedTemplate,
+      complete: isStarterTemplateMode ? isMappingValid : false,
     },
     {
       id: "preview",
       label: "Preview",
-      disabled: !isMappingValid,
-      complete: isPreviewAvailable,
+      disabled: isStarterTemplateMode ? !isMappingValid : !customDesignPreviewReady,
+      complete: isStarterTemplateMode ? isPreviewAvailable : customDesignPreviewReady,
     },
     {
       id: "export",
       label: "Export",
-      disabled: !isMappingValid,
-      complete: isExportAvailable,
+      disabled: isCustomDesignMode || !isMappingValid,
+      complete: isStarterTemplateMode ? isExportAvailable : false,
     },
   ];
 
@@ -99,10 +126,12 @@ export function BatchPdfClient() {
     setSession((current) => ({
       ...current,
       step: "template",
+      workflowMode: null,
       csv,
       mapping: {},
       previewRowIndex: 0,
       selectedTemplateId: null,
+      customDesign: resetCustomDesignState(),
     }));
   }
 
@@ -111,10 +140,29 @@ export function BatchPdfClient() {
     setSession((current) => ({
       ...current,
       step: "upload",
+      workflowMode: null,
       csv: null,
       selectedTemplateId: null,
       mapping: {},
       previewRowIndex: 0,
+      customDesign: resetCustomDesignState(),
+    }));
+  }
+
+  function handleSelectWorkflowMode(workflowMode: BatchPdfWorkflowMode) {
+    setSampleError(null);
+    setSession((current) => ({
+      ...current,
+      step: "template",
+      workflowMode,
+      selectedTemplateId:
+        workflowMode === "starterTemplate" ? current.selectedTemplateId : null,
+      mapping: workflowMode === "starterTemplate" ? current.mapping : {},
+      previewRowIndex: 0,
+      customDesign:
+        workflowMode === "customDesign"
+          ? resetCustomDesignState()
+          : resetCustomDesignState(),
     }));
   }
 
@@ -133,9 +181,11 @@ export function BatchPdfClient() {
     setSession((current) => ({
       ...current,
       step: "mapping",
+      workflowMode: "starterTemplate",
       selectedTemplateId: templateId,
       mapping: autoMapFields(template, session.csv?.headers ?? []),
       previewRowIndex: 0,
+      customDesign: resetCustomDesignState(),
     }));
   }
 
@@ -159,10 +209,12 @@ export function BatchPdfClient() {
     setSession((current) => ({
       ...current,
       step: "mapping",
+      workflowMode: "starterTemplate",
       csv: parsed.value,
       selectedTemplateId: template.id,
       mapping: autoMapFields(template, parsed.value.headers),
       previewRowIndex: 0,
+      customDesign: resetCustomDesignState(),
     }));
   }
 
@@ -198,6 +250,103 @@ export function BatchPdfClient() {
       ),
     }));
   }
+
+  const handleCustomDesignAcceptedFile = useCallback((file: File) => {
+    setSession((current) => {
+      if (current.customDesign.previewUrl) {
+        URL.revokeObjectURL(current.customDesign.previewUrl);
+      }
+
+      return {
+        ...current,
+        step: "template",
+        customDesign: {
+          file,
+          asset: null,
+          previewUrl: null,
+          previewStatus: "loading",
+          errors: [],
+          warnings: [],
+        },
+      };
+    });
+  }, []);
+
+  const handleCustomDesignRejectedFile = useCallback((errors: BatchPdfError[]) => {
+    setSession((current) => {
+      if (current.customDesign.previewUrl) {
+        URL.revokeObjectURL(current.customDesign.previewUrl);
+      }
+
+      return {
+        ...current,
+        step: "template",
+        customDesign: {
+          ...resetCustomDesignState(),
+          previewStatus: "error",
+          errors,
+        },
+      };
+    });
+  }, []);
+
+  const handleCustomDesignReset = useCallback(() => {
+    setSession((current) => {
+      if (current.customDesign.previewUrl) {
+        URL.revokeObjectURL(current.customDesign.previewUrl);
+      }
+
+      return {
+        ...current,
+        step: "template",
+        customDesign: resetCustomDesignState(),
+      };
+    });
+  }, []);
+
+  const handleCustomDesignAssetReady = useCallback((asset: DesignAsset) => {
+    setSession((current) => ({
+      ...current,
+      step: "preview",
+      customDesign: {
+        ...current.customDesign,
+        asset,
+        errors: [],
+      },
+    }));
+  }, []);
+
+  const handleCustomDesignPreviewUrlChange = useCallback((previewUrl: string | null) => {
+    setSession((current) => ({
+      ...current,
+      customDesign: {
+        ...current.customDesign,
+        previewUrl,
+      },
+    }));
+  }, []);
+
+  const handleCustomDesignPreviewStatusChange = useCallback((
+    previewStatus: CustomDesignPreviewStatus,
+  ) => {
+    setSession((current) => ({
+      ...current,
+      customDesign: {
+        ...current.customDesign,
+        previewStatus,
+      },
+    }));
+  }, []);
+
+  const handleCustomDesignErrorsChange = useCallback((errors: BatchPdfError[]) => {
+    setSession((current) => ({
+      ...current,
+      customDesign: {
+        ...current.customDesign,
+        errors,
+      },
+    }));
+  }, []);
 
   function handlePreviousPreviewRow() {
     if (!session.csv) {
@@ -265,7 +414,7 @@ export function BatchPdfClient() {
               Batch PDF builder
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Upload a CSV, choose a template, map your columns, preview your
+              Upload a CSV, choose a design, map your columns, preview your
               documents, and download a ZIP of PDFs.
             </p>
           </div>
@@ -276,7 +425,7 @@ export function BatchPdfClient() {
         </div>
       </section>
 
-      <UtilityStepper currentStepId={session.step} steps={steps} />
+      <UtilityStepper currentStepId={currentStepId} steps={steps} />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
@@ -291,13 +440,22 @@ export function BatchPdfClient() {
             loadError={sampleError}
           />
 
-          <TemplatePicker
-            selectedTemplateId={session.selectedTemplateId ?? ""}
-            onSelectTemplate={handleSelectTemplate}
-            disabled={!session.csv}
-          />
+          {session.csv ? (
+            <WorkflowModePicker
+              selectedMode={session.workflowMode}
+              onSelectMode={handleSelectWorkflowMode}
+            />
+          ) : null}
 
-          {selectedTemplate && session.csv ? (
+          {isStarterTemplateMode ? (
+            <TemplatePicker
+              selectedTemplateId={session.selectedTemplateId ?? ""}
+              onSelectTemplate={handleSelectTemplate}
+              disabled={!session.csv}
+            />
+          ) : null}
+
+          {isStarterTemplateMode && selectedTemplate && session.csv ? (
             <FieldMapper
               template={selectedTemplate}
               headers={session.csv.headers}
@@ -309,35 +467,75 @@ export function BatchPdfClient() {
               onContinue={handleContinueToPreview}
             />
           ) : null}
+
+          {isCustomDesignMode ? (
+            <CustomDesignSetupPanel
+              state={session.customDesign}
+              onAcceptedFile={handleCustomDesignAcceptedFile}
+              onRejectedFile={handleCustomDesignRejectedFile}
+              onReset={handleCustomDesignReset}
+              onAssetReady={handleCustomDesignAssetReady}
+              onPreviewUrlChange={handleCustomDesignPreviewUrlChange}
+              onPreviewStatusChange={handleCustomDesignPreviewStatusChange}
+              onErrorsChange={handleCustomDesignErrorsChange}
+            />
+          ) : null}
         </div>
 
         <aside className="space-y-6">
           <ValidationSummary
             csv={session.csv}
-            templateName={selectedTemplate?.name ?? null}
+            templateName={isStarterTemplateMode ? selectedTemplate?.name ?? null : null}
             errors={mappingErrors}
             warnings={missingValueWarnings}
-            isMappingValid={isMappingValid}
+            isMappingValid={
+              isStarterTemplateMode ? isMappingValid : customDesignPreviewReady
+            }
           />
-          <PreviewPanel
-            template={selectedTemplate}
-            rows={session.csv?.rows ?? []}
-            mapping={session.mapping}
-            previewRowIndex={session.previewRowIndex}
-            mappingReady={isPreviewAvailable}
-            errors={mappingErrors}
-            warnings={missingValueWarnings}
-            onPreviousRow={handlePreviousPreviewRow}
-            onNextRow={handleNextPreviewRow}
-            onBackToMapping={handleBackToMapping}
-            onContinueToExport={handleContinueToExport}
-          />
-          <ExportPanel
-            templateId={selectedTemplate?.id ?? null}
-            rows={session.csv?.rows ?? []}
-            mapping={session.mapping}
-            enabled={isExportAvailable && Boolean(session.csv)}
-          />
+          {isStarterTemplateMode ? (
+            <>
+              <PreviewPanel
+                template={selectedTemplate}
+                rows={session.csv?.rows ?? []}
+                mapping={session.mapping}
+                previewRowIndex={session.previewRowIndex}
+                mappingReady={isPreviewAvailable}
+                errors={mappingErrors}
+                warnings={missingValueWarnings}
+                onPreviousRow={handlePreviousPreviewRow}
+                onNextRow={handleNextPreviewRow}
+                onBackToMapping={handleBackToMapping}
+                onContinueToExport={handleContinueToExport}
+              />
+              <ExportPanel
+                templateId={selectedTemplate?.id ?? null}
+                rows={session.csv?.rows ?? []}
+                mapping={session.mapping}
+                enabled={isExportAvailable && Boolean(session.csv)}
+              />
+            </>
+          ) : null}
+          {isCustomDesignMode ? (
+            <>
+              <CustomDesignMetadataPanel asset={session.customDesign.asset} />
+              <section className="rounded-lg border border-line bg-panel p-4">
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Export
+                </p>
+                <h2 className="mt-2 text-lg font-semibold">Custom export is locked</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Place fields on your design before exporting. Field placement is coming next.
+                </p>
+                <button
+                  type="button"
+                  disabled
+                  className="mt-4 cursor-not-allowed rounded-lg bg-disabled px-4 py-2 text-sm font-medium text-disabled-foreground"
+                >
+                  Generate custom ZIP
+                </button>
+              </section>
+            </>
+          ) : null}
         </aside>
       </div>
     </div>

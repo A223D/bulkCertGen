@@ -5,11 +5,13 @@ import { getAllTemplates } from "@/lib/batch-pdf/template-registry";
 type TemplatePickerProps = {
   selectedTemplateId: string;
   onSelectTemplate: (templateId: string) => void;
+  disabled?: boolean;
 };
 
 export function TemplatePicker({
   selectedTemplateId,
   onSelectTemplate,
+  disabled = false,
 }: TemplatePickerProps) {
   const templates = getAllTemplates();
 
@@ -33,9 +35,11 @@ export function TemplatePicker({
             <button
               key={template.id}
               type="button"
+              disabled={disabled}
               onClick={() => onSelectTemplate(template.id)}
               className={[
                 "rounded-lg border p-4 text-left transition-colors",
+                disabled ? "cursor-not-allowed opacity-60" : "",
                 isSelected
                   ? "border-accent bg-accent-soft"
                   : "border-line bg-panel hover:border-accent",
@@ -65,6 +69,11 @@ export function TemplatePicker({
           );
         })}
       </div>
+      {disabled ? (
+        <p className="text-sm leading-6 text-muted-foreground">
+          Upload a valid CSV before choosing a template.
+        </p>
+      ) : null}
     </section>
   );
 }

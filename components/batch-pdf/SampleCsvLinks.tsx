@@ -1,7 +1,8 @@
-import { getAllTemplates } from "@/lib/batch-pdf/template-registry";
+import { getAllSampleCsvs } from "@/lib/batch-pdf/sample-csv";
+import { assertTemplateExists } from "@/lib/batch-pdf/template-registry";
 
 export function SampleCsvLinks() {
-  const templates = getAllTemplates();
+  const samples = getAllSampleCsvs();
 
   return (
     <section className="rounded-lg border border-dashed border-line bg-panel p-4">
@@ -9,20 +10,25 @@ export function SampleCsvLinks() {
         Sample CSVs
       </p>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Downloadable sample files arrive in Phase 2. For now, these placeholders
-        confirm each starter template has registry metadata.
+        Download a small CSV that matches one of the starter templates, then
+        upload it above to test the import flow.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
-        {templates.map((template) => (
-          <button
-            key={template.id}
-            type="button"
-            disabled
-            className="rounded-full border border-line bg-muted px-3 py-2 text-xs font-medium text-muted-foreground"
-          >
-            {template.shortName} sample
-          </button>
-        ))}
+        {samples.map((sample) => {
+          const template = assertTemplateExists(sample.templateId);
+
+          return (
+            <a
+              key={sample.templateId}
+              href={`data:text/csv;charset=utf-8,${encodeURIComponent(sample.csv)}`}
+              download={sample.fileName}
+              className="rounded-full border border-line bg-muted px-3 py-2 text-xs font-medium text-muted-foreground hover:border-accent hover:text-accent"
+              type="text/csv;charset=utf-8"
+            >
+              {template.shortName} sample
+            </a>
+          );
+        })}
       </div>
     </section>
   );

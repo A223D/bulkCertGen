@@ -1,8 +1,14 @@
 type PreviewPanelProps = {
   templateName: string;
+  mappingReady?: boolean;
+  isActive?: boolean;
 };
 
-export function PreviewPanel({ templateName }: PreviewPanelProps) {
+export function PreviewPanel({
+  templateName,
+  mappingReady = false,
+  isActive = false,
+}: PreviewPanelProps) {
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -13,7 +19,7 @@ export function PreviewPanel({ templateName }: PreviewPanelProps) {
           <h2 className="mt-2 text-xl font-semibold">{templateName}</h2>
         </div>
         <span className="w-fit rounded-full bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Placeholder
+          {isActive ? "Ready later" : "Placeholder"}
         </span>
       </div>
 
@@ -21,8 +27,9 @@ export function PreviewPanel({ templateName }: PreviewPanelProps) {
         <div className="w-full max-w-md rounded-lg border border-line bg-panel p-6 text-center">
           <p className="text-sm font-semibold text-ink">{templateName}</p>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Document preview will render here after upload, mapping, and preview
-            logic are implemented.
+            {mappingReady
+              ? "Mapping is ready. Phase 4 will render a document preview here."
+              : "Map required fields before preview is available."}
           </p>
         </div>
       </div>

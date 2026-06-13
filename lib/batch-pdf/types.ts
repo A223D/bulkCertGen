@@ -74,3 +74,7 @@ export type GeneratePdfResult = {
   fileName: string;
   contentType: "application/zip";
 };
+
+export type Result<T> =
+  | { ok: true; value: T; warnings?: BatchPdfWarning[] }
+  | { ok: false; errors: BatchPdfError[]; warnings?: BatchPdfWarning[] };

@@ -1,6 +1,8 @@
 type UtilityStep = {
   id: string;
   label: string;
+  disabled?: boolean;
+  complete?: boolean;
 };
 
 type UtilityStepperProps = {
@@ -16,13 +18,18 @@ export function UtilityStepper({ currentStepId, steps }: UtilityStepperProps) {
       <ol className="grid gap-2 sm:grid-cols-5">
         {steps.map((step, index) => {
           const isCurrent = step.id === currentStepId;
-          const isComplete = currentIndex > index;
+          const isComplete = step.complete ?? currentIndex > index;
+          const isDisabled = step.disabled;
 
           return (
             <li
               key={step.id}
-              className="flex min-h-14 items-center gap-3 rounded-lg border border-line bg-panel px-3 py-2"
+              className={[
+                "flex min-h-14 items-center gap-3 rounded-lg border border-line bg-panel px-3 py-2",
+                isDisabled ? "opacity-55" : "",
+              ].join(" ")}
               aria-current={isCurrent ? "step" : undefined}
+              data-disabled={isDisabled || undefined}
             >
               <span
                 className={[
@@ -37,7 +44,7 @@ export function UtilityStepper({ currentStepId, steps }: UtilityStepperProps) {
               <span
                 className={[
                   "text-sm font-medium leading-5",
-                  isCurrent ? "text-ink" : "text-muted-foreground",
+                  isCurrent && !isDisabled ? "text-ink" : "text-muted-foreground",
                 ].join(" ")}
               >
                 {step.label}

@@ -60,7 +60,9 @@ export function BatchPdfClient() {
       : [];
   const isMappingValid = Boolean(mappingValidation?.ok);
   const hasSelectedTemplate = Boolean(selectedTemplate);
-  const isPreviewAvailable = isMappingValid && session.step === "preview";
+  const isPreviewAvailable =
+    isMappingValid && (session.step === "preview" || session.step === "export");
+  const isExportAvailable = isMappingValid && session.step === "export";
   const steps = [
     { id: "upload", label: "Upload CSV", complete: hasCsv },
     {
@@ -81,7 +83,12 @@ export function BatchPdfClient() {
       disabled: !isMappingValid,
       complete: isPreviewAvailable,
     },
-    { id: "export", label: "Export", disabled: true },
+    {
+      id: "export",
+      label: "Export",
+      disabled: !isMappingValid,
+      complete: isExportAvailable,
+    },
   ];
 
   function handleCsvParsed(csv: CsvParseResult) {
@@ -198,6 +205,21 @@ export function BatchPdfClient() {
     }));
   }
 
+  function handleContinueToExport() {
+    if (!isMappingValid || !selectedTemplate || !session.csv) {
+      return;
+    }
+
+    setSession((current) => ({
+      ...current,
+      step: "export",
+      previewRowIndex: clampPreviewRowIndex(
+        current.previewRowIndex,
+        session.csv?.rows.length ?? 0,
+      ),
+    }));
+  }
+
   return (
     <div className="space-y-6">
       <section className="rounded-lg border border-line bg-panel p-5">
@@ -267,14 +289,20 @@ export function BatchPdfClient() {
             rows={session.csv?.rows ?? []}
             mapping={session.mapping}
             previewRowIndex={session.previewRowIndex}
-            mappingReady={isMappingValid && session.step === "preview"}
+            mappingReady={isPreviewAvailable}
             errors={mappingErrors}
             warnings={missingValueWarnings}
             onPreviousRow={handlePreviousPreviewRow}
             onNextRow={handleNextPreviewRow}
             onBackToMapping={handleBackToMapping}
+            onContinueToExport={handleContinueToExport}
           />
-          <ExportPanel />
+          <ExportPanel
+            templateId={selectedTemplate?.id ?? null}
+            rows={session.csv?.rows ?? []}
+            mapping={session.mapping}
+            enabled={isExportAvailable && Boolean(session.csv)}
+          />
         </aside>
       </div>
     </div>

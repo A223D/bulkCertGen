@@ -20,6 +20,7 @@ type PreviewPanelProps = {
   onPreviousRow: () => void;
   onNextRow: () => void;
   onBackToMapping: () => void;
+  onContinueToExport: () => void;
 };
 
 export function PreviewPanel({
@@ -33,6 +34,7 @@ export function PreviewPanel({
   onPreviousRow,
   onNextRow,
   onBackToMapping,
+  onContinueToExport,
 }: PreviewPanelProps) {
   const previewResult =
     template && mappingReady
@@ -71,8 +73,14 @@ export function PreviewPanel({
           </button>
           <button
             type="button"
-            disabled
-            className="cursor-not-allowed rounded-lg bg-disabled px-3 py-2 text-sm font-medium text-disabled-foreground"
+            disabled={!mappingReady}
+            onClick={onContinueToExport}
+            className={[
+              "rounded-lg px-3 py-2 text-sm font-medium",
+              mappingReady
+                ? "bg-ink text-panel hover:bg-accent"
+                : "cursor-not-allowed bg-disabled text-disabled-foreground",
+            ].join(" ")}
           >
             Continue to export
           </button>

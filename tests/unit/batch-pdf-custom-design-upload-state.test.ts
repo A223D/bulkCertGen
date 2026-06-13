@@ -33,10 +33,12 @@ describe("custom design upload state helpers", () => {
       previewStatus: "idle",
       errors: [],
       warnings: [],
+      fieldBoxes: [],
+      selectedFieldBoxId: null,
     });
   });
 
-  it("reset custom design state clears file, asset, preview URL, errors, and warnings", () => {
+  it("reset custom design state clears file, asset, preview URL, boxes, errors, and warnings", () => {
     expect(resetCustomDesignState()).toEqual(createEmptyCustomDesignState());
   });
 
@@ -51,7 +53,7 @@ describe("custom design upload state helpers", () => {
     ).toBe(false);
   });
 
-  it("custom design export readiness remains false in Phase 8", () => {
+  it("custom design export readiness remains false in Phase 9", () => {
     expect(isCustomDesignExportReady(readyState())).toBe(false);
   });
 });

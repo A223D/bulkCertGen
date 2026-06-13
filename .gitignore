@@ -11,3 +11,4 @@ tsconfig.tsbuildinfo
 .vscode
 
 docs/
+ignore/

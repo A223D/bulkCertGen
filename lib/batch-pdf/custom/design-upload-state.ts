@@ -1,5 +1,5 @@
 import type { BatchPdfError, BatchPdfWarning } from "../types.ts";
-import type { DesignAsset } from "./types.ts";
+import type { CustomFieldBox, DesignAsset } from "./types.ts";
 
 export type CustomDesignPreviewStatus = "idle" | "loading" | "ready" | "error";
 
@@ -10,6 +10,8 @@ export type CustomDesignState = {
   previewStatus: CustomDesignPreviewStatus;
   errors: BatchPdfError[];
   warnings: BatchPdfWarning[];
+  fieldBoxes: CustomFieldBox[];
+  selectedFieldBoxId: string | null;
 };
 
 export function createEmptyCustomDesignState(): CustomDesignState {
@@ -20,6 +22,8 @@ export function createEmptyCustomDesignState(): CustomDesignState {
     previewStatus: "idle",
     errors: [],
     warnings: [],
+    fieldBoxes: [],
+    selectedFieldBoxId: null,
   };
 }
 

@@ -20,6 +20,7 @@ type CustomDesignPreviewProps = {
   onPreviewUrlChange: (previewUrl: string | null) => void;
   onStatusChange: (status: CustomDesignPreviewStatus) => void;
   onErrorsChange: (errors: BatchPdfError[]) => void;
+  hideWhenReady?: boolean;
 };
 
 function safeError(code: string, message: string): BatchPdfError {
@@ -34,6 +35,7 @@ export function CustomDesignPreview({
   onPreviewUrlChange,
   onStatusChange,
   onErrorsChange,
+  hideWhenReady = false,
 }: CustomDesignPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -156,6 +158,10 @@ export function CustomDesignPreview({
   const isLoading = previewStatus === "loading";
   const isReady = previewStatus === "ready";
 
+  if (hideWhenReady && isReady) {
+    return null;
+  }
+
   return (
     <section className="rounded-lg border border-line bg-panel p-4" aria-labelledby="custom-design-preview-heading">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -167,7 +173,7 @@ export function CustomDesignPreview({
             Design preview
           </h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Preview runs in your browser. Field placement comes next.
+            Preview runs in your browser. Field placement appears after the design is ready.
           </p>
         </div>
         <span className="w-fit rounded-full border border-line bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">

@@ -33,12 +33,13 @@ import {
   type CustomDesignPreviewStatus,
   type CustomDesignState,
 } from "@/lib/batch-pdf/custom/design-upload-state";
+import { isCustomFieldPlacementReady } from "@/lib/batch-pdf/custom/field-box-state";
 import type {
   BatchPdfError,
   CsvParseResult,
   FieldMapping,
 } from "@/lib/batch-pdf/types";
-import type { DesignAsset } from "@/lib/batch-pdf/custom/types";
+import type { CustomFieldBox, DesignAsset } from "@/lib/batch-pdf/custom/types";
 
 type BatchPdfStep = "upload" | "template" | "mapping" | "preview" | "export";
 
@@ -85,11 +86,18 @@ export function BatchPdfClient() {
       : [];
   const isMappingValid = Boolean(mappingValidation?.ok);
   const hasSelectedTemplate = isStarterTemplateMode && Boolean(selectedTemplate);
+  const isCustomFieldReady =
+    isCustomDesignMode && session.csv
+      ? isCustomFieldPlacementReady({
+          boxes: session.customDesign.fieldBoxes,
+          csvHeaders: session.csv.headers,
+        })
+      : false;
   const isPreviewAvailable =
     isMappingValid && (session.step === "preview" || session.step === "export");
   const isExportAvailable = isMappingValid && session.step === "export";
   const currentStepId =
-    isCustomDesignMode && customDesignPreviewReady ? "preview" : session.step;
+    isCustomDesignMode && customDesignPreviewReady ? "mapping" : session.step;
   const chooseDesignComplete = isStarterTemplateMode
     ? hasSelectedTemplate
     : isCustomDesignMode && Boolean(session.customDesign.asset);
@@ -104,14 +112,14 @@ export function BatchPdfClient() {
     {
       id: "mapping",
       label: "Add fields",
-      disabled: isCustomDesignMode || !hasSelectedTemplate,
-      complete: isStarterTemplateMode ? isMappingValid : false,
+      disabled: isStarterTemplateMode ? !hasSelectedTemplate : !customDesignPreviewReady,
+      complete: isStarterTemplateMode ? isMappingValid : isCustomFieldReady,
     },
     {
       id: "preview",
       label: "Preview",
-      disabled: isStarterTemplateMode ? !isMappingValid : !customDesignPreviewReady,
-      complete: isStarterTemplateMode ? isPreviewAvailable : customDesignPreviewReady,
+      disabled: isStarterTemplateMode ? !isMappingValid : !isCustomFieldReady,
+      complete: isStarterTemplateMode ? isPreviewAvailable : isCustomFieldReady,
     },
     {
       id: "export",
@@ -261,12 +269,9 @@ export function BatchPdfClient() {
         ...current,
         step: "template",
         customDesign: {
+          ...resetCustomDesignState(),
           file,
-          asset: null,
-          previewUrl: null,
           previewStatus: "loading",
-          errors: [],
-          warnings: [],
         },
       };
     });
@@ -344,6 +349,31 @@ export function BatchPdfClient() {
       customDesign: {
         ...current.customDesign,
         errors,
+      },
+    }));
+  }, []);
+
+  const handleCustomFieldBoxesChange = useCallback((fieldBoxes: CustomFieldBox[]) => {
+    setSession((current) => ({
+      ...current,
+      customDesign: {
+        ...current.customDesign,
+        fieldBoxes,
+        selectedFieldBoxId: fieldBoxes.some(
+          (box) => box.id === current.customDesign.selectedFieldBoxId,
+        )
+          ? current.customDesign.selectedFieldBoxId
+          : fieldBoxes[0]?.id ?? null,
+      },
+    }));
+  }, []);
+
+  const handleSelectedFieldBoxChange = useCallback((selectedFieldBoxId: string | null) => {
+    setSession((current) => ({
+      ...current,
+      customDesign: {
+        ...current.customDesign,
+        selectedFieldBoxId,
       },
     }));
   }, []);
@@ -478,6 +508,9 @@ export function BatchPdfClient() {
               onPreviewUrlChange={handleCustomDesignPreviewUrlChange}
               onPreviewStatusChange={handleCustomDesignPreviewStatusChange}
               onErrorsChange={handleCustomDesignErrorsChange}
+              csvHeaders={session.csv?.headers ?? []}
+              onFieldBoxesChange={handleCustomFieldBoxesChange}
+              onSelectedFieldBoxChange={handleSelectedFieldBoxChange}
             />
           ) : null}
         </div>
@@ -524,7 +557,7 @@ export function BatchPdfClient() {
                 </p>
                 <h2 className="mt-2 text-lg font-semibold">Custom export is locked</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Place fields on your design before exporting. Field placement is coming next.
+                  Text fit checks and custom rendering are coming next. Your placed fields stay in this browser session for now.
                 </p>
                 <button
                   type="button"

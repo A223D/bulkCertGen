@@ -1,13 +1,15 @@
 "use client";
 
+import { CustomFieldPlacementEditor } from "./CustomFieldPlacementEditor";
 import { CustomDesignPreview } from "./CustomDesignPreview";
 import { CustomDesignUpload } from "./CustomDesignUpload";
+import { isCustomDesignPreviewReady } from "@/lib/batch-pdf/custom/design-upload-state";
 import type { BatchPdfError } from "@/lib/batch-pdf/types";
 import type {
   CustomDesignPreviewStatus,
   CustomDesignState,
 } from "@/lib/batch-pdf/custom/design-upload-state";
-import type { DesignAsset } from "@/lib/batch-pdf/custom/types";
+import type { CustomFieldBox, DesignAsset } from "@/lib/batch-pdf/custom/types";
 
 type CustomDesignSetupPanelProps = {
   state: CustomDesignState;
@@ -18,6 +20,9 @@ type CustomDesignSetupPanelProps = {
   onPreviewUrlChange: (previewUrl: string | null) => void;
   onPreviewStatusChange: (status: CustomDesignPreviewStatus) => void;
   onErrorsChange: (errors: BatchPdfError[]) => void;
+  csvHeaders: string[];
+  onFieldBoxesChange: (boxes: CustomFieldBox[]) => void;
+  onSelectedFieldBoxChange: (boxId: string | null) => void;
 };
 
 export function CustomDesignSetupPanel({
@@ -29,7 +34,12 @@ export function CustomDesignSetupPanel({
   onPreviewUrlChange,
   onPreviewStatusChange,
   onErrorsChange,
+  csvHeaders,
+  onFieldBoxesChange,
+  onSelectedFieldBoxChange,
 }: CustomDesignSetupPanelProps) {
+  const isReady = isCustomDesignPreviewReady(state);
+
   return (
     <div className="space-y-6">
       <CustomDesignUpload
@@ -46,16 +56,20 @@ export function CustomDesignSetupPanel({
         onPreviewUrlChange={onPreviewUrlChange}
         onStatusChange={onPreviewStatusChange}
         onErrorsChange={onErrorsChange}
+        hideWhenReady={isReady}
       />
-      <section className="rounded-lg border border-line bg-panel p-4">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Add fields
-        </p>
-        <h2 className="mt-2 text-lg font-semibold">Field placement comes next</h2>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          This phase only uploads and previews your design. Dragging CSV fields onto the design is planned for the next phase.
-        </p>
-      </section>
+      {isReady ? (
+        <CustomFieldPlacementEditor
+          file={state.file}
+          asset={state.asset}
+          previewUrl={state.previewUrl}
+          csvHeaders={csvHeaders}
+          boxes={state.fieldBoxes}
+          selectedBoxId={state.selectedFieldBoxId}
+          onBoxesChange={onFieldBoxesChange}
+          onSelectedBoxChange={onSelectedFieldBoxChange}
+        />
+      ) : null}
     </div>
   );
 }

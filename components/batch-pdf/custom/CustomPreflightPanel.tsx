@@ -5,7 +5,12 @@ import { PreflightSummary } from "./PreflightSummary";
 import { PreflightIssueList } from "./PreflightIssueList";
 import { runCustomDesignPreflight } from "@/lib/batch-pdf/custom/preflight";
 import { createDefaultExportOptions } from "@/lib/batch-pdf/custom/export-options";
-import type { CustomFieldBox, DesignAsset, ExportOptions } from "@/lib/batch-pdf/custom/types";
+import type {
+  CustomFieldBox,
+  DesignAsset,
+  ExportOptions,
+} from "@/lib/batch-pdf/custom/types";
+import type { CustomDesignPreflightResult } from "@/lib/batch-pdf/custom/preflight";
 import type { CsvRow } from "@/lib/batch-pdf/types";
 
 const MAX_DISPLAY_ISSUES = 100;
@@ -15,19 +20,22 @@ type Props = {
   rows: CsvRow[];
   csvHeaders: string[];
   fieldBoxes: CustomFieldBox[];
+  onExportOptionsChange?: (options: ExportOptions) => void;
+  onPreflightResultChange?: (result: CustomDesignPreflightResult | null) => void;
 };
 
-export function CustomPreflightPanel({ design, rows, csvHeaders, fieldBoxes }: Props) {
+export function CustomPreflightPanel({
+  design,
+  rows,
+  csvHeaders,
+  fieldBoxes,
+  onExportOptionsChange,
+  onPreflightResultChange,
+}: Props) {
   const isImageDesign = design.intrinsicUnit === "px";
 
   const [widthIn, setWidthIn] = useState("");
   const [heightIn, setHeightIn] = useState("");
-
-  // Reset size inputs when the design file changes.
-  useEffect(() => {
-    setWidthIn("");
-    setHeightIn("");
-  }, [design.fileName, design.sizeBytes]);
 
   const exportOptions = useMemo((): ExportOptions => {
     if (!isImageDesign) return createDefaultExportOptions();
@@ -45,6 +53,11 @@ export function CustomPreflightPanel({ design, rows, csvHeaders, fieldBoxes }: P
     return createDefaultExportOptions();
   }, [isImageDesign, widthIn, heightIn]);
 
+  // Notify parent whenever export options change.
+  useEffect(() => {
+    onExportOptionsChange?.(exportOptions);
+  }, [exportOptions, onExportOptionsChange]);
+
   const preflightResult = useMemo(() => {
     if (rows.length === 0) return null;
 
@@ -58,6 +71,11 @@ export function CustomPreflightPanel({ design, rows, csvHeaders, fieldBoxes }: P
 
     return result.ok ? result.value : null;
   }, [design, rows, csvHeaders, fieldBoxes, exportOptions]);
+
+  // Notify parent whenever preflight result changes.
+  useEffect(() => {
+    onPreflightResultChange?.(preflightResult);
+  }, [preflightResult, onPreflightResultChange]);
 
   if (!preflightResult) {
     return (
@@ -122,10 +140,6 @@ export function CustomPreflightPanel({ design, rows, csvHeaders, fieldBoxes }: P
       {displayIssues.length > 0 ? (
         <PreflightIssueList issues={displayIssues} hiddenCount={hiddenIssueCount} />
       ) : null}
-
-      <p className="text-xs leading-5 text-muted-foreground">
-        Export comes next. Fix blocking issues before export is enabled.
-      </p>
     </section>
   );
 }

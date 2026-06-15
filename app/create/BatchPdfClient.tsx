@@ -35,14 +35,18 @@ import {
   type CustomDesignState,
 } from "@/lib/batch-pdf/custom/design-upload-state";
 import { isCustomFieldPlacementReady } from "@/lib/batch-pdf/custom/field-box-state";
+import { createDefaultExportOptions } from "@/lib/batch-pdf/custom/export-options";
+import { BATCH_PDF_LIMITS } from "@/lib/batch-pdf/limits";
 import type {
   BatchPdfError,
   CsvParseResult,
   FieldMapping,
 } from "@/lib/batch-pdf/types";
-import type { CustomFieldBox, DesignAsset } from "@/lib/batch-pdf/custom/types";
+import type { CustomFieldBox, DesignAsset, ExportOptions } from "@/lib/batch-pdf/custom/types";
+import type { CustomDesignPreflightResult } from "@/lib/batch-pdf/custom/preflight";
 
 type BatchPdfStep = "upload" | "template" | "mapping" | "preview" | "export";
+type CustomExportStatus = "idle" | "loading" | "success" | "error";
 
 type BatchPdfSessionState = {
   step: BatchPdfStep;
@@ -52,6 +56,8 @@ type BatchPdfSessionState = {
   mapping: FieldMapping;
   previewRowIndex: number;
   customDesign: CustomDesignState;
+  customExportOptions: ExportOptions;
+  customPreflightResult: CustomDesignPreflightResult | null;
 };
 
 export function BatchPdfClient() {
@@ -63,8 +69,14 @@ export function BatchPdfClient() {
     mapping: {},
     previewRowIndex: 0,
     customDesign: createEmptyCustomDesignState(),
+    customExportOptions: createDefaultExportOptions(),
+    customPreflightResult: null,
   });
   const [sampleError, setSampleError] = useState<string | null>(null);
+  const [customExportStatus, setCustomExportStatus] =
+    useState<CustomExportStatus>("idle");
+  const [customExportError, setCustomExportError] = useState<string | null>(null);
+
   const selectedTemplate = getTemplateById(session.selectedTemplateId ?? "");
   const isStarterTemplateMode = session.workflowMode === "starterTemplate";
   const isCustomDesignMode = session.workflowMode === "customDesign";
@@ -130,8 +142,36 @@ export function BatchPdfClient() {
     },
   ];
 
+  // ---------------------------------------------------------------------------
+  // Custom export readiness
+  // ---------------------------------------------------------------------------
+
+  const preflightStatus = session.customPreflightResult?.status ?? null;
+  const isImageDesign = session.customDesign.asset?.intrinsicUnit === "px";
+  const imageHasValidSize =
+    !isImageDesign ||
+    (session.customExportOptions.itemSizeMode === "custom" &&
+      typeof session.customExportOptions.customItemWidth === "number" &&
+      session.customExportOptions.customItemWidth > 0 &&
+      typeof session.customExportOptions.customItemHeight === "number" &&
+      session.customExportOptions.customItemHeight > 0);
+
+  const isCustomExportReady =
+    Boolean(session.csv) &&
+    Boolean(session.customDesign.asset) &&
+    Boolean(session.customDesign.file) &&
+    session.customDesign.fieldBoxes.length > 0 &&
+    imageHasValidSize &&
+    (preflightStatus === "ready" || preflightStatus === "readyWithWarnings");
+
+  // ---------------------------------------------------------------------------
+  // Event handlers
+  // ---------------------------------------------------------------------------
+
   function handleCsvParsed(csv: CsvParseResult) {
     setSampleError(null);
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
     setSession((current) => ({
       ...current,
       step: "template",
@@ -141,11 +181,15 @@ export function BatchPdfClient() {
       previewRowIndex: 0,
       selectedTemplateId: null,
       customDesign: resetCustomDesignState(),
+      customExportOptions: createDefaultExportOptions(),
+      customPreflightResult: null,
     }));
   }
 
   function handleCsvReset() {
     setSampleError(null);
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
     setSession((current) => ({
       ...current,
       step: "upload",
@@ -155,11 +199,15 @@ export function BatchPdfClient() {
       mapping: {},
       previewRowIndex: 0,
       customDesign: resetCustomDesignState(),
+      customExportOptions: createDefaultExportOptions(),
+      customPreflightResult: null,
     }));
   }
 
   function handleSelectWorkflowMode(workflowMode: BatchPdfWorkflowMode) {
     setSampleError(null);
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
     setSession((current) => ({
       ...current,
       step: "template",
@@ -168,10 +216,9 @@ export function BatchPdfClient() {
         workflowMode === "starterTemplate" ? current.selectedTemplateId : null,
       mapping: workflowMode === "starterTemplate" ? current.mapping : {},
       previewRowIndex: 0,
-      customDesign:
-        workflowMode === "customDesign"
-          ? resetCustomDesignState()
-          : resetCustomDesignState(),
+      customDesign: resetCustomDesignState(),
+      customExportOptions: createDefaultExportOptions(),
+      customPreflightResult: null,
     }));
   }
 
@@ -261,6 +308,8 @@ export function BatchPdfClient() {
   }
 
   const handleCustomDesignAcceptedFile = useCallback((file: File) => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
     setSession((current) => {
       if (current.customDesign.previewUrl) {
         URL.revokeObjectURL(current.customDesign.previewUrl);
@@ -274,11 +323,15 @@ export function BatchPdfClient() {
           file,
           previewStatus: "loading",
         },
+        customExportOptions: createDefaultExportOptions(),
+        customPreflightResult: null,
       };
     });
   }, []);
 
   const handleCustomDesignRejectedFile = useCallback((errors: BatchPdfError[]) => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
     setSession((current) => {
       if (current.customDesign.previewUrl) {
         URL.revokeObjectURL(current.customDesign.previewUrl);
@@ -292,11 +345,15 @@ export function BatchPdfClient() {
           previewStatus: "error",
           errors,
         },
+        customExportOptions: createDefaultExportOptions(),
+        customPreflightResult: null,
       };
     });
   }, []);
 
   const handleCustomDesignReset = useCallback(() => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
     setSession((current) => {
       if (current.customDesign.previewUrl) {
         URL.revokeObjectURL(current.customDesign.previewUrl);
@@ -306,6 +363,8 @@ export function BatchPdfClient() {
         ...current,
         step: "template",
         customDesign: resetCustomDesignState(),
+        customExportOptions: createDefaultExportOptions(),
+        customPreflightResult: null,
       };
     });
   }, []);
@@ -379,6 +438,23 @@ export function BatchPdfClient() {
     }));
   }, []);
 
+  const handleCustomExportOptionsChange = useCallback((options: ExportOptions) => {
+    setSession((current) => ({
+      ...current,
+      customExportOptions: options,
+    }));
+  }, []);
+
+  const handleCustomPreflightResultChange = useCallback(
+    (result: CustomDesignPreflightResult | null) => {
+      setSession((current) => ({
+        ...current,
+        customPreflightResult: result,
+      }));
+    },
+    [],
+  );
+
   function handlePreviousPreviewRow() {
     if (!session.csv) {
       return;
@@ -432,6 +508,74 @@ export function BatchPdfClient() {
       ),
     }));
   }
+
+  async function handleCustomExport() {
+    const { customDesign, csv, customExportOptions } = session;
+
+    if (!csv || !customDesign.asset || !customDesign.file) {
+      return;
+    }
+
+    setCustomExportStatus("loading");
+    setCustomExportError(null);
+
+    try {
+      const payload = {
+        mode: "free" as const,
+        rows: csv.rows,
+        csvHeaders: csv.headers,
+        designAsset: customDesign.asset,
+        fieldBoxes: customDesign.fieldBoxes,
+        exportOptions: customExportOptions,
+      };
+
+      const formData = new FormData();
+      formData.append("designFile", customDesign.file);
+      formData.append("payload", JSON.stringify(payload));
+
+      const response = await fetch("/api/generate-custom-pdf", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let message = "Export failed. Fix any highlighted issues and try again.";
+        try {
+          const body = await response.json();
+          if (typeof body?.error === "string") {
+            message = body.error;
+          }
+        } catch {
+          // ignore JSON parse failure
+        }
+        setCustomExportError(message);
+        setCustomExportStatus("error");
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "batch-pdf-custom-export.zip";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setCustomExportStatus("success");
+    } catch {
+      setCustomExportError(
+        "Something went wrong. Check your connection and try again.",
+      );
+      setCustomExportStatus("error");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
+  const hasWarnings = preflightStatus === "readyWithWarnings";
 
   return (
     <div className="space-y-6">
@@ -556,26 +700,72 @@ export function BatchPdfClient() {
               session.csv &&
               session.customDesign.fieldBoxes.length > 0 ? (
                 <CustomPreflightPanel
+                  key={`${session.customDesign.asset.fileName}-${session.customDesign.asset.sizeBytes}`}
                   design={session.customDesign.asset}
                   rows={session.csv.rows}
                   csvHeaders={session.csv.headers}
                   fieldBoxes={session.customDesign.fieldBoxes}
+                  onExportOptionsChange={handleCustomExportOptionsChange}
+                  onPreflightResultChange={handleCustomPreflightResultChange}
                 />
               ) : null}
               <section className="rounded-lg border border-line bg-panel p-4">
                 <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   Export
                 </p>
-                <h2 className="mt-2 text-lg font-semibold">Custom export is coming next</h2>
+                <h2 className="mt-2 text-lg font-semibold">
+                  Generate free custom ZIP
+                </h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Place your field boxes and review preflight results above. Custom rendering will be enabled in the next phase.
+                  Free export generates the first{" "}
+                  <strong>{BATCH_PDF_LIMITS.freeExportRows}</strong> PDFs in
+                  this batch.
                 </p>
+
+                {hasWarnings ? (
+                  <p className="mt-2 text-sm leading-6 text-yellow-700 dark:text-yellow-400">
+                    Some values will be adjusted during export. Review warnings
+                    before continuing.
+                  </p>
+                ) : null}
+
+                {!isCustomExportReady && preflightStatus === "blocked" ? (
+                  <p className="mt-2 text-sm leading-6 text-destructive">
+                    Fix the highlighted preflight issues before exporting.
+                  </p>
+                ) : null}
+
+                {!isCustomExportReady && preflightStatus === "needsOutputSize" ? (
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Enter the image dimensions above to enable export.
+                  </p>
+                ) : null}
+
+                {customExportStatus === "error" && customExportError ? (
+                  <p className="mt-2 text-sm leading-6 text-destructive">
+                    {customExportError}
+                  </p>
+                ) : null}
+
+                {customExportStatus === "success" ? (
+                  <p className="mt-2 text-sm leading-6 text-green-700 dark:text-green-400">
+                    ZIP downloaded successfully.
+                  </p>
+                ) : null}
+
                 <button
                   type="button"
-                  disabled
-                  className="mt-4 cursor-not-allowed rounded-lg bg-disabled px-4 py-2 text-sm font-medium text-disabled-foreground"
+                  disabled={!isCustomExportReady || customExportStatus === "loading"}
+                  onClick={handleCustomExport}
+                  className={
+                    isCustomExportReady && customExportStatus !== "loading"
+                      ? "mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+                      : "mt-4 cursor-not-allowed rounded-lg bg-disabled px-4 py-2 text-sm font-medium text-disabled-foreground"
+                  }
                 >
-                  Generate custom ZIP
+                  {customExportStatus === "loading"
+                    ? "Generating..."
+                    : "Generate free custom ZIP"}
                 </button>
               </section>
             </>

@@ -726,25 +726,29 @@ export function BatchPdfClient() {
           </p>
         </div>
 
-        <CustomDesignUpload
-          state={customDesign}
-          onAcceptedFile={handleCustomDesignAcceptedFile}
-          onRejectedFile={handleCustomDesignRejectedFile}
-          onReset={handleCustomDesignReset}
-        />
-
-        {customDesign.file && (
-          <CustomDesignPreview
-            file={customDesign.file}
-            previewUrl={customDesign.previewUrl}
-            previewStatus={customDesign.previewStatus}
-            onAssetReady={handleCustomDesignAssetReady}
-            onPreviewUrlChange={handleCustomDesignPreviewUrlChange}
-            onStatusChange={handleCustomDesignPreviewStatusChange}
-            onErrorsChange={handleCustomDesignErrorsChange}
-            hideWhenReady={customDesignReady}
+        <div style={{ display: customDesignReady ? "none" : "block" }}>
+          <CustomDesignUpload
+            state={customDesign}
+            onAcceptedFile={handleCustomDesignAcceptedFile}
+            onRejectedFile={handleCustomDesignRejectedFile}
+            onReset={handleCustomDesignReset}
           />
-        )}
+        </div>
+
+        <div style={{ display: customDesignReady ? "none" : "block" }}>
+          {customDesign.file && (
+            <CustomDesignPreview
+              file={customDesign.file}
+              previewUrl={customDesign.previewUrl}
+              previewStatus={customDesign.previewStatus}
+              onAssetReady={handleCustomDesignAssetReady}
+              onPreviewUrlChange={handleCustomDesignPreviewUrlChange}
+              onStatusChange={handleCustomDesignPreviewStatusChange}
+              onErrorsChange={handleCustomDesignErrorsChange}
+              hideWhenReady={false}
+            />
+          )}
+        </div>
 
         {customDesignReady && customDesign.asset && (
           <div style={{ marginTop: 16 }}>

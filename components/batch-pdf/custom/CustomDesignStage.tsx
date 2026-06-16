@@ -47,7 +47,7 @@ type CustomDesignStageProps = {
 export function CustomDesignStage({
   file,
   asset,
-  previewUrl,
+  previewUrl: _previewUrl,
   boxes,
   selectedBoxId,
   onSelectBox,
@@ -59,6 +59,19 @@ export function CustomDesignStage({
   const [pdfPreviewFailedFileName, setPdfPreviewFailedFileName] = useState<string | null>(
     null,
   );
+  const [imgUrl, setImgUrl] = useState<string | null>(null);
+
+  // Create a local object URL from file for image kinds so it survives
+  // parent component remounts that revoke the originally-created URL.
+  useEffect(() => {
+    if (!file || (asset.kind !== "jpeg" && asset.kind !== "png")) {
+      setImgUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setImgUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file, asset.kind]);
 
   useEffect(() => {
     if (!file || asset.kind !== "pdf" || !canvasRef.current) {
@@ -220,9 +233,9 @@ export function CustomDesignStage({
         style={{ aspectRatio: `${asset.intrinsicWidth} / ${asset.intrinsicHeight}` }}
       >
         {asset.kind === "png" || asset.kind === "jpeg" ? (
-          previewUrl ? (
+          imgUrl ? (
             <img
-              src={previewUrl}
+              src={imgUrl}
               alt=""
               className="absolute inset-0 h-full w-full object-contain"
               draggable={false}

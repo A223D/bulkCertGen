@@ -6,35 +6,119 @@ type AppShellProps = {
 
 export function AppShell({ children }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-canvas">
-      <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-6 py-8 sm:px-8 lg:px-10">
-        <header className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <Link
-              href="/"
-              className="text-sm font-semibold uppercase tracking-[0.16em] text-ink"
-            >
-              Very Simple Batch PDF
-            </Link>
-            <p className="mt-2 text-sm text-muted-foreground">
-              CSV to PDFs for simple batch documents
-            </p>
-          </div>
-          <nav className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Link href="/" className="hover:text-accent">
-              Home
-            </Link>
-            <Link href="/create" className="hover:text-accent">
-              Create
-            </Link>
-            <Link href="/legal/privacy" className="hover:text-accent">
-              Privacy
-            </Link>
-          </nav>
-        </header>
+    <div className="min-h-screen bg-[#FAF8F3]">
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 60,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "15px 32px",
+          backdropFilter: "blur(10px)",
+          background: "rgba(250,248,243,0.82)",
+          borderBottom: "1px solid rgba(231,226,214,0.7)",
+          height: 62,
+          boxSizing: "border-box",
+        }}
+      >
+        <Link
+          href="/"
+          style={{ display: "flex", alignItems: "center", gap: 11, textDecoration: "none" }}
+        >
+          <span
+            style={{
+              position: "relative",
+              width: 32,
+              height: 32,
+              display: "inline-block",
+            }}
+            aria-hidden="true"
+          >
+            <span
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "#F2B01E",
+                borderRadius: 9,
+                transform: "rotate(-6deg)",
+              }}
+            />
+            <span
+              style={{
+                position: "absolute",
+                left: 7,
+                top: 6,
+                width: 16,
+                height: 20,
+                background: "#FFFFFF",
+                borderRadius: 3,
+                boxShadow: "4px 4px 0 #1A1916",
+              }}
+            />
+          </span>
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: 16,
+              letterSpacing: "-0.02em",
+              color: "#1A1916",
+            }}
+          >
+            Very Simple Batch PDF
+          </span>
+        </Link>
 
-        <main className="flex-1 space-y-8">{children}</main>
-      </div>
+        <nav
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            fontSize: 14,
+            fontWeight: 600,
+          }}
+        >
+          <Link
+            href="/legal/privacy"
+            style={{
+              color: "#4A463E",
+              padding: "8px 12px",
+              borderRadius: 8,
+              textDecoration: "none",
+            }}
+          >
+            Privacy
+          </Link>
+          <Link
+            href="/#faq"
+            style={{
+              color: "#4A463E",
+              padding: "8px 12px",
+              borderRadius: 8,
+              textDecoration: "none",
+            }}
+          >
+            FAQ
+          </Link>
+          <Link
+            href="/"
+            style={{
+              marginLeft: 6,
+              background: "#1A1916",
+              color: "#fff",
+              padding: "9px 17px",
+              borderRadius: 10,
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            Home
+          </Link>
+        </nav>
+      </header>
+
+      <main>{children}</main>
     </div>
   );
 }

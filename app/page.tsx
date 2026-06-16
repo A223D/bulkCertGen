@@ -8,7 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { BATCH_PDF_LIMITS } from "../lib/batch-pdf/limits";
-import HeroDiagram from "./hero-diagram";
+import { HeroCsvCard } from "@/components/batch-pdf/HeroCsvCard";
 import MapDiagram from "./map-diagram";
 
 export const metadata: Metadata = {
@@ -948,11 +948,7 @@ export default function HomePage() {
                 href="#how"
                 className="inline-flex min-h-12 items-center justify-center gap-[9px] rounded-xl border border-[#dad3c4] bg-white px-[24px] py-[15px] text-[16px] font-bold text-[#1a1916] no-underline transition hover:-translate-y-0.5"
               >
-                <span
-                  className="inline-block h-[9px] w-[9px] rounded-full bg-[#1a1916]"
-                  aria-hidden="true"
-                />
-                Try sample CSV
+                How it works
               </a>
             </div>
             <div className="mt-[26px] flex flex-wrap items-center gap-x-[18px] gap-y-2 text-[13.5px] font-semibold text-[#7a756a]">
@@ -973,7 +969,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <HeroDiagram />
+          <HeroCsvCard />
         </header>
       </div>
 

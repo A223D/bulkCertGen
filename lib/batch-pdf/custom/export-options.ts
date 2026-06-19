@@ -1,6 +1,7 @@
 import { CUSTOM_DESIGN_LIMITS } from "../limits.ts";
 import type { Result } from "../types.ts";
 import { calculateSheetLayout } from "./sheet-layout.ts";
+import type { SheetLayoutResult } from "./sheet-layout.ts";
 import type {
   DesignAsset,
   ExportOptions,
@@ -75,8 +76,17 @@ export function applyOrientation(args: {
   };
 }
 
+// "auto" is resolved per-orientation by resolveSheetLayoutForExport; anywhere a
+// single concrete orientation is needed (one-per-page, page-size resolution),
+// auto falls back to portrait.
+function concreteOrientation(
+  orientation: ExportOptions["orientation"],
+): "portrait" | "landscape" {
+  return orientation === "landscape" ? "landscape" : "portrait";
+}
+
 function orientSize(widthPt: number, heightPt: number, orientation: ExportOptions["orientation"]) {
-  return applyOrientation({ widthPt, heightPt, orientation });
+  return applyOrientation({ widthPt, heightPt, orientation: concreteOrientation(orientation) });
 }
 
 function measurementToInches(value: number, unit: MeasurementUnit): number {
@@ -261,7 +271,7 @@ export function resolveSheetPageSizePoints(args: {
         ...applyOrientation({
           widthPt: itemSize.value.widthPt,
           heightPt: itemSize.value.heightPt,
-          orientation: exportOptions.orientation,
+          orientation: concreteOrientation(exportOptions.orientation),
         }),
         source: "sameAsDesign",
       },
@@ -306,7 +316,11 @@ export function validateExportOptions(
   csvHeaders: string[] = [],
   designAsset?: DesignAsset,
 ): Result<ExportOptions> {
-  if (options.orientation !== "portrait" && options.orientation !== "landscape") {
+  if (
+    options.orientation !== "portrait" &&
+    options.orientation !== "landscape" &&
+    options.orientation !== "auto"
+  ) {
     return error("custom_export_invalid_orientation", "Choose a supported orientation.");
   }
 
@@ -386,24 +400,12 @@ export function validateExportOptions(
     }
 
     if (options.layoutMode === "fitMultiplePerPage") {
-      const pageSize = resolveSheetPageSizePoints({ exportOptions: options, designAsset });
-
-      if (!pageSize.ok) {
-        return pageSize as Result<ExportOptions>;
-      }
-
-      const layout = calculateSheetLayout({
+      // Confirms at least one item fits — for "auto", succeeds if either
+      // orientation fits.
+      const layout = resolveSheetLayoutForExport({
+        exportOptions: options,
+        designAsset,
         rowCount: 1,
-        pageWidthPt: pageSize.value.widthPt,
-        pageHeightPt: pageSize.value.heightPt,
-        itemWidthPt: itemSize.value.widthPt,
-        itemHeightPt: itemSize.value.heightPt,
-        marginTopPt: measurementToPoints(options.marginTop, options.unit),
-        marginRightPt: measurementToPoints(options.marginRight, options.unit),
-        marginBottomPt: measurementToPoints(options.marginBottom, options.unit),
-        marginLeftPt: measurementToPoints(options.marginLeft, options.unit),
-        gapXPt: measurementToPoints(options.gapX, options.unit),
-        gapYPt: measurementToPoints(options.gapY, options.unit),
       });
 
       if (!layout.ok) {
@@ -413,4 +415,103 @@ export function validateExportOptions(
   }
 
   return { ok: true, value: options };
+}
+
+export type ResolvedSheetLayout = {
+  layout: SheetLayoutResult;
+  pageWidthPt: number;
+  pageHeightPt: number;
+  itemWidthPt: number;
+  itemHeightPt: number;
+  orientation: "portrait" | "landscape";
+};
+
+/**
+ * Resolves the print-sheet layout, choosing the orientation that produces the
+ * fewest pages when `orientation` is "auto". Used by the layout preview, the
+ * export route, and validation so they all agree on the chosen orientation.
+ */
+export function resolveSheetLayoutForExport(args: {
+  exportOptions: ExportOptions;
+  designAsset: DesignAsset;
+  rowCount: number;
+}): Result<ResolvedSheetLayout> {
+  const { exportOptions, designAsset, rowCount } = args;
+
+  const itemSize = resolveExportItemSizePoints({ exportOptions, designAsset });
+  if (!itemSize.ok) {
+    return itemSize as Result<ResolvedSheetLayout>;
+  }
+
+  const orientations: Array<"portrait" | "landscape"> =
+    exportOptions.orientation === "auto"
+      ? ["portrait", "landscape"]
+      : [concreteOrientation(exportOptions.orientation)];
+
+  let best: ResolvedSheetLayout | null = null;
+  let lastError: Result<never> | null = null;
+
+  for (const orientation of orientations) {
+    const page = resolveSheetPageSizePoints({
+      exportOptions: { ...exportOptions, orientation },
+      designAsset,
+    });
+    if (!page.ok) {
+      lastError = page;
+      continue;
+    }
+
+    const layout = calculateSheetLayout({
+      rowCount,
+      pageWidthPt: page.value.widthPt,
+      pageHeightPt: page.value.heightPt,
+      itemWidthPt: itemSize.value.widthPt,
+      itemHeightPt: itemSize.value.heightPt,
+      marginTopPt: measurementToPoints(exportOptions.marginTop, exportOptions.unit),
+      marginRightPt: measurementToPoints(exportOptions.marginRight, exportOptions.unit),
+      marginBottomPt: measurementToPoints(exportOptions.marginBottom, exportOptions.unit),
+      marginLeftPt: measurementToPoints(exportOptions.marginLeft, exportOptions.unit),
+      gapXPt: measurementToPoints(exportOptions.gapX, exportOptions.unit),
+      gapYPt: measurementToPoints(exportOptions.gapY, exportOptions.unit),
+    });
+    if (!layout.ok) {
+      lastError = layout;
+      continue;
+    }
+
+    const candidate: ResolvedSheetLayout = {
+      layout: layout.value,
+      pageWidthPt: page.value.widthPt,
+      pageHeightPt: page.value.heightPt,
+      itemWidthPt: itemSize.value.widthPt,
+      itemHeightPt: itemSize.value.heightPt,
+      orientation,
+    };
+
+    // Prefer fewer pages; on a tie, prefer the denser layout (more per page).
+    if (
+      !best ||
+      candidate.layout.pageCount < best.layout.pageCount ||
+      (candidate.layout.pageCount === best.layout.pageCount &&
+        candidate.layout.itemsPerPage > best.layout.itemsPerPage)
+    ) {
+      best = candidate;
+    }
+  }
+
+  if (!best) {
+    return (
+      lastError ?? {
+        ok: false,
+        errors: [
+          {
+            code: "custom_sheet_item_too_large",
+            message: "The item is too large to fit on the page with these margins.",
+          },
+        ],
+      }
+    );
+  }
+
+  return { ok: true, value: best };
 }

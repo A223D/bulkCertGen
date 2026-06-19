@@ -31,11 +31,10 @@ import type {
 import { isCustomFieldPlacementReady } from "@/lib/batch-pdf/custom/field-box-state";
 import {
   createDefaultExportOptions,
-  measurementToPoints,
   resolveExportItemSizePoints,
-  resolveSheetPageSizePoints,
+  resolveSheetLayoutForExport,
 } from "@/lib/batch-pdf/custom/export-options";
-import { calculateSheetLayout, type SheetLayoutResult } from "@/lib/batch-pdf/custom/sheet-layout";
+import type { SheetLayoutResult } from "@/lib/batch-pdf/custom/sheet-layout";
 import { BATCH_PDF_LIMITS } from "@/lib/batch-pdf/limits";
 import type { BatchPdfError, CsvParseResult, CsvRow, FieldMapping } from "@/lib/batch-pdf/types";
 import type { CustomFieldBox, DesignAsset, ExportOptions } from "@/lib/batch-pdf/custom/types";
@@ -637,12 +636,14 @@ function CustomExportLayoutPreview({
   rowCount,
   freeRows,
   sheetLayoutInfo,
+  previewUrl,
 }: {
   exportOptions: ExportOptions;
   design: DesignAsset;
   rowCount: number;
   freeRows: number;
   sheetLayoutInfo: SheetLayoutInfo | null;
+  previewUrl?: string | null;
 }) {
   const itemSize = resolveExportItemSizePoints({ exportOptions, designAsset: design });
   const ptToIn = (pt: number) => `${(pt / 72).toFixed(2)} in`;
@@ -731,7 +732,10 @@ function CustomExportLayoutPreview({
                     width: `${(item.widthPt / pageWidthPt) * 100}%`,
                     height: `${(item.heightPt / pageHeightPt) * 100}%`,
                     border: "1.5px solid #F2B01E",
-                    background: "rgba(242,176,30,0.12)",
+                    background: previewUrl ? "#fff" : "rgba(242,176,30,0.12)",
+                    backgroundImage: previewUrl ? `url(${previewUrl})` : undefined,
+                    backgroundSize: "100% 100%",
+                    backgroundRepeat: "no-repeat",
                     borderRadius: 4,
                     boxSizing: "border-box",
                     display: "flex",
@@ -849,28 +853,20 @@ export function BatchPdfClient() {
     const opts = session.customExportOptions;
     if (!design || opts.layoutMode !== "fitMultiplePerPage") return null;
 
-    const item = resolveExportItemSizePoints({ exportOptions: opts, designAsset: design });
-    if (!item.ok) return null;
-
-    const page = resolveSheetPageSizePoints({ exportOptions: opts, designAsset: design });
-    if (!page.ok) return null;
-
-    const layout = calculateSheetLayout({
+    const resolved = resolveSheetLayoutForExport({
+      exportOptions: opts,
+      designAsset: design,
       rowCount: freeRows,
-      pageWidthPt: page.value.widthPt,
-      pageHeightPt: page.value.heightPt,
-      itemWidthPt: item.value.widthPt,
-      itemHeightPt: item.value.heightPt,
-      marginTopPt: measurementToPoints(opts.marginTop, opts.unit),
-      marginRightPt: measurementToPoints(opts.marginRight, opts.unit),
-      marginBottomPt: measurementToPoints(opts.marginBottom, opts.unit),
-      marginLeftPt: measurementToPoints(opts.marginLeft, opts.unit),
-      gapXPt: measurementToPoints(opts.gapX, opts.unit),
-      gapYPt: measurementToPoints(opts.gapY, opts.unit),
     });
-    if (!layout.ok) return null;
+    if (!resolved.ok) return null;
 
-    return { layout: layout.value, pageWidthPt: page.value.widthPt, pageHeightPt: page.value.heightPt, itemWidthPt: item.value.widthPt, itemHeightPt: item.value.heightPt };
+    return {
+      layout: resolved.value.layout,
+      pageWidthPt: resolved.value.pageWidthPt,
+      pageHeightPt: resolved.value.pageHeightPt,
+      itemWidthPt: resolved.value.itemWidthPt,
+      itemHeightPt: resolved.value.itemHeightPt,
+    };
   }, [session.customDesign.asset, session.customExportOptions, freeRows]);
 
   const layoutCanCalculate = !isPrintSheets || sheetLayoutInfo !== null;
@@ -1860,14 +1856,17 @@ export function BatchPdfClient() {
         </HelpfulTip>
 
         <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, alignItems: "start" }}>
-          <div style={{ display: "grid", gap: 16 }}>
-            <CustomExportLayoutPreview
-              exportOptions={session.customExportOptions}
-              design={customDesign.asset}
-              rowCount={csvRowCount}
-              freeRows={freeRows}
-              sheetLayoutInfo={sheetLayoutInfo}
-            />
+          <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
+            <div style={{ position: "sticky", top: 78, zIndex: 2 }} data-rsticky>
+              <CustomExportLayoutPreview
+                exportOptions={session.customExportOptions}
+                design={customDesign.asset}
+                rowCount={csvRowCount}
+                freeRows={freeRows}
+                sheetLayoutInfo={sheetLayoutInfo}
+                previewUrl={customDesign.previewUrl}
+              />
+            </div>
 
             <CustomExportOptionsPanel
               exportOptions={session.customExportOptions}

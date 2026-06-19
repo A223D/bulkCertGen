@@ -9,7 +9,7 @@ export const controlLabelClass =
   "text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground";
 
 export const inputClass =
-  "w-full rounded border border-line bg-background px-2 py-1 text-sm";
+  "w-full rounded border border-line bg-panel px-2 py-1 text-sm";
 
 export function ControlGroup({
   label,
@@ -44,7 +44,7 @@ export function SegmentedControl<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="flex flex-wrap gap-1.5 rounded-md border border-line bg-background p-1"
+      className="flex flex-wrap gap-1.5 rounded-md border border-line bg-muted p-1"
     >
       {options.map((option) => {
         const selected = option.value === value;
@@ -57,8 +57,8 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(option.value)}
             className={`flex-1 whitespace-nowrap rounded px-2.5 py-1.5 text-xs font-semibold transition ${
               selected
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:text-foreground"
+                ? "bg-ink text-panel shadow-sm"
+                : "text-muted-foreground hover:bg-panel hover:text-ink"
             }`}
           >
             {option.label}
@@ -149,7 +149,7 @@ export function Checkbox({
         className="mt-0.5"
       />
       <span>
-        <span className="text-sm font-medium text-foreground">{label}</span>
+        <span className="text-sm font-medium text-ink">{label}</span>
         {hint ? (
           <span className="block text-xs leading-5 text-muted-foreground">{hint}</span>
         ) : null}

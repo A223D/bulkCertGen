@@ -24,33 +24,6 @@ export function TextStyleControls({ style, onChange }: TextStyleControlsProps) {
       </p>
       <div className="grid grid-cols-2 gap-3">
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
-          <span>Font</span>
-          <select
-            value={style.fontFamily}
-            onChange={(event) =>
-              patch({ fontFamily: event.target.value as TextBoxStyle["fontFamily"] })
-            }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
-          >
-            <option value="Helvetica">Helvetica</option>
-            <option value="Times">Times</option>
-            <option value="Courier">Courier</option>
-          </select>
-        </label>
-        <label className="space-y-1 text-xs font-medium text-muted-foreground">
-          <span>Weight</span>
-          <select
-            value={style.fontWeight}
-            onChange={(event) =>
-              patch({ fontWeight: event.target.value as TextBoxStyle["fontWeight"] })
-            }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
-          >
-            <option value="normal">Normal</option>
-            <option value="bold">Bold</option>
-          </select>
-        </label>
-        <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Size</span>
           <input
             type="number"

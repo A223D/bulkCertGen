@@ -67,7 +67,7 @@ export type MeasurementUnit = "in" | "mm";
 
 export type ExportOptions = {
   pageSize: PageSizeKey;
-  orientation: "portrait" | "landscape";
+  orientation: "portrait" | "landscape" | "auto";
   layoutMode: "onePerPage" | "fitMultiplePerPage";
   itemSizeMode: "fromDesign" | "custom";
   customItemWidth?: number;

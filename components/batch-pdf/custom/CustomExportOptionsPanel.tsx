@@ -46,9 +46,15 @@ export function CustomExportOptionsPanel({
           patch({
             layoutMode,
             // "Same as design" makes the page equal to the item, so no item can
-            // fit once margins are applied. Move to a real page size for sheets.
-            ...(layoutMode === "fitMultiplePerPage" && exportOptions.pageSize === "sameAsDesign"
-              ? { pageSize: "letter" as const }
+            // fit once margins are applied. Move to a real page size for sheets,
+            // and let orientation auto-optimize for the fewest pages.
+            ...(layoutMode === "fitMultiplePerPage"
+              ? {
+                  orientation: "auto" as const,
+                  ...(exportOptions.pageSize === "sameAsDesign"
+                    ? { pageSize: "letter" as const }
+                    : {}),
+                }
               : {}),
           })
         }

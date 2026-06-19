@@ -68,7 +68,8 @@ export function createDefaultCsvFieldBox(args: {
     source: { type: "csvColumn", column: args.column },
     rect: makeOffsetRect(args.existingBoxes),
     style: createDefaultTextBoxStyle(),
-    required: true,
+    // Missing values render blank rather than blocking export.
+    required: false,
   };
 }
 

@@ -2,13 +2,8 @@ import { PDFDocument, rgb } from "pdf-lib";
 import type { PDFFont, PDFPage } from "pdf-lib";
 import { normalizedRectToPoints } from "./coordinates.ts";
 import { calculateCropMarks } from "./crop-marks.ts";
-import {
-  measurementToPoints,
-  resolveExportItemSizePoints,
-  resolveSheetPageSizePoints,
-} from "./export-options.ts";
+import { resolveSheetLayoutForExport } from "./export-options.ts";
 import { resolveDesignItemSizeForPreflight } from "./preflight.ts";
-import { calculateSheetLayout } from "./sheet-layout.ts";
 import { resolveTextFit } from "./text-fit.ts";
 import { estimateTextBlockHeightPt } from "./text-measurement.ts";
 import {
@@ -96,43 +91,27 @@ export async function renderCustomDesignPrintSheets(args: {
 }): Promise<Uint8Array> {
   const { designBytes, designAsset, rows, fieldBoxes, exportOptions } = args;
 
-  const itemSize = resolveExportItemSizePoints({ exportOptions, designAsset });
-  if (!itemSize.ok) {
-    throw new Error("Could not resolve the item size for the print sheet.");
-  }
-
-  const pageSize = resolveSheetPageSizePoints({ exportOptions, designAsset });
-  if (!pageSize.ok) {
-    throw new Error("Could not resolve the page size for the print sheet.");
-  }
-
-  const layout = calculateSheetLayout({
+  // Resolves item + page size and the chosen orientation (fewest pages for "auto").
+  const resolved = resolveSheetLayoutForExport({
+    exportOptions,
+    designAsset,
     rowCount: rows.length,
-    pageWidthPt: pageSize.value.widthPt,
-    pageHeightPt: pageSize.value.heightPt,
-    itemWidthPt: itemSize.value.widthPt,
-    itemHeightPt: itemSize.value.heightPt,
-    marginTopPt: measurementToPoints(exportOptions.marginTop, exportOptions.unit),
-    marginRightPt: measurementToPoints(exportOptions.marginRight, exportOptions.unit),
-    marginBottomPt: measurementToPoints(exportOptions.marginBottom, exportOptions.unit),
-    marginLeftPt: measurementToPoints(exportOptions.marginLeft, exportOptions.unit),
-    gapXPt: measurementToPoints(exportOptions.gapX, exportOptions.unit),
-    gapYPt: measurementToPoints(exportOptions.gapY, exportOptions.unit),
   });
-
-  if (!layout.ok) {
+  if (!resolved.ok) {
     throw new Error("Could not lay out the print sheet with these options.");
   }
+
+  const layout = resolved.value.layout;
 
   const outputPdf = await PDFDocument.create();
   const drawBackground = await embedBackgroundDrawer(outputPdf, designBytes, designAsset);
   const getFont = makeFontFactory(outputPdf);
 
   // Always produce at least one (possibly empty) page so the PDF is valid.
-  const pages = layout.value.pages.length > 0 ? layout.value.pages : [{ pageIndex: 0, items: [] }];
+  const pages = layout.pages.length > 0 ? layout.pages : [{ pageIndex: 0, items: [] }];
 
   for (const layoutPage of pages) {
-    const pdfPage = outputPdf.addPage([layout.value.pageWidthPt, layout.value.pageHeightPt]);
+    const pdfPage = outputPdf.addPage([layout.pageWidthPt, layout.pageHeightPt]);
 
     for (const item of layoutPage.items) {
       const row = rows[item.rowIndex] ?? {};

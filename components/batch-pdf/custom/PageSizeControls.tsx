@@ -35,12 +35,13 @@ export function PageSizeControls({
         </select>
       </ControlGroup>
 
-      <ControlGroup label="Orientation">
+      <ControlGroup label="Orientation" hint="Auto picks the orientation that needs the fewest pages.">
         <SegmentedControl<ExportOptions["orientation"]>
           ariaLabel="Orientation"
           value={options.orientation}
           onChange={(orientation) => onChange({ orientation })}
           options={[
+            { value: "auto", label: "Auto" },
             { value: "portrait", label: "Portrait" },
             { value: "landscape", label: "Landscape" },
           ]}
@@ -71,7 +72,7 @@ export function PageSizeControls({
               aria-label="Measurement unit"
               value={options.unit}
               onChange={(event) => onChange({ unit: event.target.value as MeasurementUnit })}
-              className="rounded border border-line bg-background px-2 py-1 text-sm"
+              className="rounded border border-line bg-panel px-2 py-1 text-sm"
             >
               <option value="in">in</option>
               <option value="mm">mm</option>

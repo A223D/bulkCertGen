@@ -59,7 +59,7 @@ export function ItemSizeControls({
               aria-label="Measurement unit"
               value={options.unit}
               onChange={(event) => onChange({ unit: event.target.value as MeasurementUnit })}
-              className="rounded border border-line bg-background px-2 py-1 text-sm"
+              className="rounded border border-line bg-panel px-2 py-1 text-sm"
             >
               <option value="in">in</option>
               <option value="mm">mm</option>

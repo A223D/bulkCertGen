@@ -90,6 +90,11 @@ export function FieldBoxInspector({
     onUpdate(box.id, { style: patchStyle(box.style, { align }) });
   }
 
+  function updateStyle(patch: Partial<TextBoxStyle>) {
+    if (!box) return;
+    onUpdate(box.id, { style: patchStyle(box.style, patch) });
+  }
+
   return (
     <div className="space-y-4 rounded-lg border border-line bg-panel p-4">
       <div>
@@ -130,6 +135,36 @@ export function FieldBoxInspector({
           />
         </label>
       ) : null}
+
+      <div className="grid grid-cols-2 gap-3">
+        <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span>Font</span>
+          <select
+            value={box.style.fontFamily}
+            onChange={(event) =>
+              updateStyle({ fontFamily: event.target.value as TextBoxStyle["fontFamily"] })
+            }
+            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium normal-case tracking-normal text-ink"
+          >
+            <option value="Helvetica">Helvetica</option>
+            <option value="Times">Times</option>
+            <option value="Courier">Courier</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span>Weight</span>
+          <select
+            value={box.style.fontWeight}
+            onChange={(event) =>
+              updateStyle({ fontWeight: event.target.value as TextBoxStyle["fontWeight"] })
+            }
+            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium normal-case tracking-normal text-ink"
+          >
+            <option value="normal">Normal</option>
+            <option value="bold">Bold</option>
+          </select>
+        </label>
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -217,16 +252,6 @@ export function FieldBoxInspector({
                 onChange={(event) => onUpdate(box.id, { label: event.target.value })}
                 className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
               />
-            </label>
-
-            <label className="flex items-center gap-2 text-sm text-ink">
-              <input
-                type="checkbox"
-                checked={box.required}
-                onChange={(event) => onUpdate(box.id, { required: event.target.checked })}
-                className="h-4 w-4 accent-accent"
-              />
-              This field must have a value
             </label>
 
             <TextStyleControls

@@ -5,8 +5,15 @@ import {
   validateCustomExportPayload,
 } from "@/lib/batch-pdf/custom/export-request";
 import { runCustomDesignPreflight } from "@/lib/batch-pdf/custom/preflight";
-import { renderCustomDesignPdfForRow } from "@/lib/batch-pdf/custom/compositor";
+import {
+  renderCustomDesignPdfForRow,
+  renderCustomDesignPrintSheets,
+} from "@/lib/batch-pdf/custom/compositor";
 import { makeSafeCustomPdfFilename } from "@/lib/batch-pdf/custom/custom-filenames";
+import {
+  createPreflightReportCsv,
+  PREFLIGHT_REPORT_FILENAME,
+} from "@/lib/batch-pdf/custom/export-report";
 import { createPdfZip } from "@/lib/batch-pdf/zip";
 
 export const runtime = "nodejs";
@@ -105,28 +112,52 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError(SAFE_ERROR);
   }
 
-  // Render one PDF per row, then ZIP.
+  // Render PDFs according to the selected layout mode, then ZIP.
   try {
-    const files = await Promise.all(
-      cappedRows.map(async (row, index) => {
-        const bytes = await renderCustomDesignPdfForRow({
-          designBytes,
-          designAsset: payload.designAsset,
-          row,
-          fieldBoxes: payload.fieldBoxes,
-          exportOptions: payload.exportOptions,
-        });
+    const files: Array<{ filename: string; bytes: Uint8Array }> = [];
 
-        return {
-          filename: makeSafeCustomPdfFilename({
-            index: index + 1,
+    if (payload.exportOptions.layoutMode === "fitMultiplePerPage") {
+      const sheetBytes = await renderCustomDesignPrintSheets({
+        designBytes,
+        designAsset: payload.designAsset,
+        rows: cappedRows,
+        fieldBoxes: payload.fieldBoxes,
+        exportOptions: payload.exportOptions,
+      });
+
+      files.push({ filename: "custom-print-sheets.pdf", bytes: sheetBytes });
+    } else {
+      const perRowFiles = await Promise.all(
+        cappedRows.map(async (row, index) => {
+          const bytes = await renderCustomDesignPdfForRow({
+            designBytes,
+            designAsset: payload.designAsset,
             row,
+            fieldBoxes: payload.fieldBoxes,
             exportOptions: payload.exportOptions,
-          }),
-          bytes,
-        };
-      }),
-    );
+          });
+
+          return {
+            filename: makeSafeCustomPdfFilename({
+              index: index + 1,
+              row,
+              exportOptions: payload.exportOptions,
+            }),
+            bytes,
+          };
+        }),
+      );
+
+      files.push(...perRowFiles);
+    }
+
+    if (payload.exportOptions.includeOverflowReport) {
+      const csv = createPreflightReportCsv({ result: preflight });
+      files.push({
+        filename: PREFLIGHT_REPORT_FILENAME,
+        bytes: new TextEncoder().encode(csv),
+      });
+    }
 
     const zipBytes = await createPdfZip(files);
 

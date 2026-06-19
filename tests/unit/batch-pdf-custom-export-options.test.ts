@@ -1,16 +1,48 @@
 import { describe, expect, it } from "vitest";
 import { CUSTOM_DESIGN_LIMITS } from "../../lib/batch-pdf/limits.ts";
 import {
+  applyOrientation,
   createDefaultExportOptions,
   getCommonPageSizes,
   getPageSizeDefinition,
   inchesToPoints,
   measurementToPoints,
   mmToPoints,
+  resolveExportItemSizePoints,
   resolveExportPageSizePoints,
+  resolveSheetPageSizePoints,
   validateExportOptions,
 } from "../../lib/batch-pdf/custom/export-options.ts";
-import type { ExportOptions } from "../../lib/batch-pdf/custom/types.ts";
+import type { DesignAsset, ExportOptions } from "../../lib/batch-pdf/custom/types.ts";
+
+function makePdfDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
+  return {
+    kind: "pdf",
+    fileName: "design.pdf",
+    sizeBytes: 50000,
+    selectedPageIndex: 0,
+    intrinsicWidth: 612,
+    intrinsicHeight: 792,
+    intrinsicUnit: "pt",
+    aspectRatio: 612 / 792,
+    pageCount: 1,
+    ...overrides,
+  };
+}
+
+function makeImageDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
+  return {
+    kind: "png",
+    fileName: "design.png",
+    sizeBytes: 80000,
+    selectedPageIndex: 0,
+    intrinsicWidth: 1000,
+    intrinsicHeight: 1000,
+    intrinsicUnit: "px",
+    aspectRatio: 1,
+    ...overrides,
+  };
+}
 
 function makeOptions(overrides: Partial<ExportOptions> = {}): ExportOptions {
   return {
@@ -183,5 +215,137 @@ describe("custom design export option utilities", () => {
 
       expect(messages).not.toContain(privateValue);
     }
+  });
+});
+
+describe("applyOrientation", () => {
+  it("swaps dimensions to satisfy the requested orientation", () => {
+    const portrait = applyOrientation({ widthPt: 200, heightPt: 100, orientation: "portrait" });
+    expect(portrait).toEqual({ widthPt: 100, heightPt: 200 });
+
+    const landscape = applyOrientation({ widthPt: 100, heightPt: 200, orientation: "landscape" });
+    expect(landscape).toEqual({ widthPt: 200, heightPt: 100 });
+  });
+});
+
+describe("resolveExportItemSizePoints", () => {
+  it("uses intrinsic PDF dimensions for sameAsDesign (fromDesign)", () => {
+    const result = resolveExportItemSizePoints({
+      exportOptions: makeOptions({ itemSizeMode: "fromDesign" }),
+      designAsset: makePdfDesign(),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected resolution");
+    expect(result.value.widthPt).toBe(612);
+    expect(result.value.heightPt).toBe(792);
+    expect(result.value.source).toBe("sameAsDesign");
+  });
+
+  it("returns needs_output_size for an image without a custom item size", () => {
+    const result = resolveExportItemSizePoints({
+      exportOptions: makeOptions({ itemSizeMode: "fromDesign" }),
+      designAsset: makeImageDesign(),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure");
+    expect(result.errors[0].code).toBe("needs_output_size");
+  });
+
+  it("resolves an image with a custom item size", () => {
+    const result = resolveExportItemSizePoints({
+      exportOptions: makeOptions({
+        itemSizeMode: "custom",
+        customItemWidth: 4,
+        customItemHeight: 3,
+        unit: "in",
+      }),
+      designAsset: makeImageDesign(),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected resolution");
+    expect(result.value.widthPt).toBe(288);
+    expect(result.value.heightPt).toBe(216);
+    expect(result.value.source).toBe("customItemSize");
+  });
+});
+
+describe("resolveSheetPageSizePoints", () => {
+  it("resolves sameAsDesign to the PDF intrinsic size", () => {
+    const result = resolveSheetPageSizePoints({
+      exportOptions: makeOptions({ pageSize: "sameAsDesign", orientation: "portrait" }),
+      designAsset: makePdfDesign(),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected resolution");
+    expect(result.value.widthPt).toBe(612);
+    expect(result.value.heightPt).toBe(792);
+    expect(result.value.source).toBe("sameAsDesign");
+  });
+
+  it("returns needs_output_size for an image sameAsDesign without a size", () => {
+    const result = resolveSheetPageSizePoints({
+      exportOptions: makeOptions({ pageSize: "sameAsDesign", itemSizeMode: "fromDesign" }),
+      designAsset: makeImageDesign(),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure");
+    expect(result.errors[0].code).toBe("needs_output_size");
+  });
+
+  it("resolves a common page size", () => {
+    const result = resolveSheetPageSizePoints({
+      exportOptions: makeOptions({ pageSize: "letter" }),
+      designAsset: makePdfDesign(),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected resolution");
+    expect(result.value.widthPt).toBe(612);
+    expect(result.value.heightPt).toBe(792);
+    expect(result.value.source).toBe("commonPageSize");
+  });
+});
+
+describe("validateExportOptions with a design asset", () => {
+  it("accepts fitMultiplePerPage when at least one item fits", () => {
+    const result = validateExportOptions(
+      makeOptions({
+        layoutMode: "fitMultiplePerPage",
+        pageSize: "letter",
+        itemSizeMode: "custom",
+        customItemWidth: 2,
+        customItemHeight: 1,
+        unit: "in",
+      }),
+      [],
+      makePdfDesign(),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects fitMultiplePerPage when no item fits", () => {
+    const result = validateExportOptions(
+      makeOptions({
+        layoutMode: "fitMultiplePerPage",
+        pageSize: "letter",
+        itemSizeMode: "custom",
+        customItemWidth: 20,
+        customItemHeight: 20,
+        unit: "in",
+      }),
+      [],
+      makePdfDesign(),
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects an image fromDesign item size as unresolved", () => {
+    const result = validateExportOptions(
+      makeOptions({ itemSizeMode: "fromDesign" }),
+      [],
+      makeImageDesign(),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure");
+    expect(result.errors[0].code).toBe("needs_output_size");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UtilityStepper } from "@/components/batch-pdf/UtilityStepper";
 import type { WizardStep } from "@/components/batch-pdf/UtilityStepper";
@@ -8,6 +8,7 @@ import { CustomDesignUpload } from "@/components/batch-pdf/custom/CustomDesignUp
 import { CustomDesignPreview } from "@/components/batch-pdf/custom/CustomDesignPreview";
 import { CustomFieldPlacementEditor } from "@/components/batch-pdf/custom/CustomFieldPlacementEditor";
 import { CustomPreflightPanel } from "@/components/batch-pdf/custom/CustomPreflightPanel";
+import { CustomExportOptionsPanel } from "@/components/batch-pdf/custom/CustomExportOptionsPanel";
 import { TemplatePreviewRenderer } from "@/components/batch-pdf/previews/TemplatePreviewRenderer";
 import {
   autoMapFields,
@@ -28,7 +29,13 @@ import type {
   CustomDesignState,
 } from "@/lib/batch-pdf/custom/design-upload-state";
 import { isCustomFieldPlacementReady } from "@/lib/batch-pdf/custom/field-box-state";
-import { createDefaultExportOptions } from "@/lib/batch-pdf/custom/export-options";
+import {
+  createDefaultExportOptions,
+  measurementToPoints,
+  resolveExportItemSizePoints,
+  resolveSheetPageSizePoints,
+} from "@/lib/batch-pdf/custom/export-options";
+import { calculateSheetLayout } from "@/lib/batch-pdf/custom/sheet-layout";
 import { BATCH_PDF_LIMITS } from "@/lib/batch-pdf/limits";
 import type { BatchPdfError, CsvParseResult, FieldMapping } from "@/lib/batch-pdf/types";
 import type { CustomFieldBox, DesignAsset, ExportOptions } from "@/lib/batch-pdf/custom/types";
@@ -281,6 +288,7 @@ export function BatchPdfClient() {
 
   const preflightStatus = session.customPreflightResult?.status ?? null;
   const isImageDesign = session.customDesign.asset?.intrinsicUnit === "px";
+  const isPrintSheets = session.customExportOptions.layoutMode === "fitMultiplePerPage";
   const imageHasValidSize =
     !isImageDesign ||
     (session.customExportOptions.itemSizeMode === "custom" &&
@@ -288,12 +296,46 @@ export function BatchPdfClient() {
       session.customExportOptions.customItemWidth > 0 &&
       typeof session.customExportOptions.customItemHeight === "number" &&
       session.customExportOptions.customItemHeight > 0);
+
+  // Resolve a print-sheet layout preview for the current options + design.
+  const sheetLayoutInfo = useMemo(() => {
+    const design = session.customDesign.asset;
+    const opts = session.customExportOptions;
+    if (!design || opts.layoutMode !== "fitMultiplePerPage") return null;
+
+    const item = resolveExportItemSizePoints({ exportOptions: opts, designAsset: design });
+    if (!item.ok) return null;
+
+    const page = resolveSheetPageSizePoints({ exportOptions: opts, designAsset: design });
+    if (!page.ok) return null;
+
+    const layout = calculateSheetLayout({
+      rowCount: freeRows,
+      pageWidthPt: page.value.widthPt,
+      pageHeightPt: page.value.heightPt,
+      itemWidthPt: item.value.widthPt,
+      itemHeightPt: item.value.heightPt,
+      marginTopPt: measurementToPoints(opts.marginTop, opts.unit),
+      marginRightPt: measurementToPoints(opts.marginRight, opts.unit),
+      marginBottomPt: measurementToPoints(opts.marginBottom, opts.unit),
+      marginLeftPt: measurementToPoints(opts.marginLeft, opts.unit),
+      gapXPt: measurementToPoints(opts.gapX, opts.unit),
+      gapYPt: measurementToPoints(opts.gapY, opts.unit),
+    });
+    if (!layout.ok) return null;
+
+    return { layout: layout.value, pageWidthPt: page.value.widthPt, pageHeightPt: page.value.heightPt, itemWidthPt: item.value.widthPt, itemHeightPt: item.value.heightPt };
+  }, [session.customDesign.asset, session.customExportOptions, freeRows]);
+
+  const layoutCanCalculate = !isPrintSheets || sheetLayoutInfo !== null;
+
   const isCustomExportReady =
     Boolean(session.csv) &&
     Boolean(session.customDesign.asset) &&
     Boolean(session.customDesign.file) &&
     session.customDesign.fieldBoxes.length > 0 &&
     imageHasValidSize &&
+    layoutCanCalculate &&
     (preflightStatus === "ready" || preflightStatus === "readyWithWarnings");
 
   // ── Stepper ────────────────────────────────────────────────────────────────
@@ -427,7 +469,18 @@ export function BatchPdfClient() {
   }, []);
 
   const handleCustomDesignAssetReady = useCallback((asset: DesignAsset) => {
-    setSession((s) => ({ ...s, customDesign: { ...s.customDesign, asset, errors: [] } }));
+    setSession((s) => {
+      // Image designs use pixels, so "same as design" cannot resolve to physical
+      // points — preselect custom item sizing so the user just enters dimensions.
+      const needsCustomItemSize = asset.intrinsicUnit === "px";
+      return {
+        ...s,
+        customDesign: { ...s.customDesign, asset, errors: [] },
+        customExportOptions: needsCustomItemSize
+          ? { ...s.customExportOptions, itemSizeMode: "custom" }
+          : s.customExportOptions,
+      };
+    });
   }, []);
 
   const handleCustomDesignPreviewUrlChange = useCallback((previewUrl: string | null) => {
@@ -979,7 +1032,8 @@ export function BatchPdfClient() {
     if (canExport && hasWarnings) { sBg = "#FBEFCB"; sBorder = "#F0DFA8"; sIcon = "⚠"; sTitle = "Ready with warnings"; sBody = "Some values may be adjusted during export. Review the issues below."; }
     else if (canExport) { sBg = "#EEF8F1"; sBorder = "#CDEBD9"; sIcon = "✓"; sTitle = "Ready to export"; sBody = "Every value fits its field. You're good to go."; }
     else if (preflightStatus === "blocked") { sBg = "#FBEEEA"; sBorder = "#F2C9BD"; sIcon = "✕"; sTitle = "Issues to fix"; sBody = "Fix the highlighted preflight issues before exporting."; }
-    else if (preflightStatus === "needsOutputSize") { sIcon = "↕"; sTitle = "Set print size"; sBody = "Enter the print dimensions to continue."; }
+    else if (preflightStatus === "needsOutputSize") { sIcon = "↕"; sTitle = "Set print size"; sBody = "Enter the item print size in export options to continue."; }
+    else if (isPrintSheets && !layoutCanCalculate) { sBg = "#FBEEEA"; sBorder = "#F2C9BD"; sIcon = "✕"; sTitle = "Layout doesn't fit"; sBody = "No item fits on the page with these margins. Reduce margins, gaps, or item size."; }
 
     return (
       <div>
@@ -988,15 +1042,23 @@ export function BatchPdfClient() {
         <p style={{ ...SUBTEXT, maxWidth: 640 }}>We check each row&apos;s values against your field boxes so you don&apos;t get clipped text.</p>
 
         <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24, alignItems: "start" }}>
-          <CustomPreflightPanel
-            key={`${customDesign.asset.fileName}-${customDesign.asset.sizeBytes}`}
-            design={customDesign.asset}
-            rows={csv.rows}
-            csvHeaders={csv.headers}
-            fieldBoxes={customDesign.fieldBoxes}
-            onExportOptionsChange={handleCustomExportOptionsChange}
-            onPreflightResultChange={handleCustomPreflightResultChange}
-          />
+          <div style={{ display: "grid", gap: 16 }}>
+            <CustomExportOptionsPanel
+              exportOptions={session.customExportOptions}
+              design={customDesign.asset}
+              csvHeaders={csv.headers}
+              onChange={handleCustomExportOptionsChange}
+            />
+            <CustomPreflightPanel
+              key={`${customDesign.asset.fileName}-${customDesign.asset.sizeBytes}`}
+              design={customDesign.asset}
+              rows={csv.rows}
+              csvHeaders={csv.headers}
+              fieldBoxes={customDesign.fieldBoxes}
+              exportOptions={session.customExportOptions}
+              onPreflightResultChange={handleCustomPreflightResultChange}
+            />
+          </div>
 
           <aside data-raside style={{ position: "sticky", top: 130 }}>
             <div style={{ background: sBg, border: `1px solid ${sBorder}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
@@ -1028,9 +1090,22 @@ export function BatchPdfClient() {
     const exportError = isStarterMode ? starterExportError : customExportError;
     const overFreeCount = Math.max(0, csvRowCount - BATCH_PDF_LIMITS.freeExportRows);
     const doExport = isStarterMode ? handleStarterExport : handleCustomExport;
+    const ptToIn = (pt: number) => `${(pt / 72).toFixed(2)} in`;
     const summary: [string, string][] = isStarterMode
       ? [["Template", selectedTemplate?.name ?? "—"], ["Rows in CSV", String(csvRowCount)], ["PDFs in this export", String(freeRows)]]
-      : [["Design", session.customDesign.asset?.fileName ?? "—"], ["Rows in CSV", String(csvRowCount)], ["PDFs in this export", String(freeRows)]];
+      : isPrintSheets && sheetLayoutInfo
+        ? [
+            ["Design", session.customDesign.asset?.fileName ?? "—"],
+            ["Rows in CSV", String(csvRowCount)],
+            ["Page size", `${ptToIn(sheetLayoutInfo.pageWidthPt)} × ${ptToIn(sheetLayoutInfo.pageHeightPt)}`],
+            ["Item size", `${ptToIn(sheetLayoutInfo.itemWidthPt)} × ${ptToIn(sheetLayoutInfo.itemHeightPt)}`],
+            ["Items per page", String(sheetLayoutInfo.layout.itemsPerPage)],
+            ["Sheet pages", String(sheetLayoutInfo.layout.pageCount)],
+          ]
+        : [["Design", session.customDesign.asset?.fileName ?? "—"], ["Rows in CSV", String(csvRowCount)], ["PDFs in this export", String(freeRows)]];
+    const customButtonLabel = isPrintSheets
+      ? "Generate free print-sheet ZIP ↓"
+      : "Generate free custom ZIP ↓";
 
     return (
       <div style={{ maxWidth: 600, margin: "0 auto" }}>
@@ -1059,7 +1134,7 @@ export function BatchPdfClient() {
                 </div>
               </div>
               <button type="button" onClick={doExport} style={{ width: "100%", marginTop: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 9, background: "#F2B01E", color: "#1A1916", fontWeight: 700, fontSize: 16, padding: 15, border: "none", borderRadius: 12, cursor: "pointer", boxShadow: "0 2px 0 #C98F11, 0 12px 26px -10px rgba(242,176,30,0.6)" }}>
-                Generate free ZIP ↓
+                {isStarterMode ? "Generate free ZIP ↓" : customButtonLabel}
               </button>
               <button type="button" onClick={() => goToStep("preview")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>← Back</button>
             </div>

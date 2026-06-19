@@ -121,13 +121,6 @@ export function validateCustomExportPayload(
     );
   }
 
-  if (payload.exportOptions.layoutMode === "fitMultiplePerPage") {
-    return safeError(
-      "custom_export_print_sheet_unavailable",
-      "Print-sheet export is not available yet. Use one-per-page export for now.",
-    );
-  }
-
   // Image designs require a physical item size for rendering.
   if (payload.designAsset.intrinsicUnit === "px") {
     const opts = payload.exportOptions;
@@ -155,10 +148,12 @@ export function validateCustomExportPayload(
   );
   if (!boxesResult.ok) return boxesResult;
 
-  // Pass csvHeaders so filenameColumn is validated.
+  // Pass csvHeaders so filenameColumn is validated, and the design asset so
+  // size resolution and print-sheet layout fit can be confirmed.
   const optionsResult = validateExportOptions(
     payload.exportOptions,
     payload.csvHeaders,
+    payload.designAsset,
   );
   if (!optionsResult.ok) return optionsResult;
 

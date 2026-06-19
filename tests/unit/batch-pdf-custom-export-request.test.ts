@@ -179,17 +179,44 @@ describe("validateCustomExportPayload", () => {
     }
   });
 
-  it("rejects fitMultiplePerPage", () => {
+  it("accepts fitMultiplePerPage when the layout fits at least one item", () => {
     const exportOptions: ExportOptions = {
       ...createDefaultExportOptions(),
       layoutMode: "fitMultiplePerPage",
+      outputMode: "printSheetsZip",
+      pageSize: "letter",
+      itemSizeMode: "custom",
+      customItemWidth: 2,
+      customItemHeight: 1,
+      unit: "in",
+    };
+    const result = validateCustomExportPayload(makeValidPayload({ exportOptions }));
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects fitMultiplePerPage when no item fits on the page", () => {
+    const exportOptions: ExportOptions = {
+      ...createDefaultExportOptions(),
+      layoutMode: "fitMultiplePerPage",
+      outputMode: "printSheetsZip",
+      pageSize: "letter",
+      itemSizeMode: "custom",
+      customItemWidth: 20,
+      customItemHeight: 20,
+      unit: "in",
     };
     const result = validateCustomExportPayload(makeValidPayload({ exportOptions }));
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.errors[0].code).toBe("custom_export_print_sheet_unavailable");
-      expect(result.errors[0].message).toContain("Print-sheet");
-    }
+  });
+
+  it("accepts cropMarks and includeOverflowReport toggles", () => {
+    const exportOptions: ExportOptions = {
+      ...createDefaultExportOptions(),
+      cropMarks: true,
+      includeOverflowReport: true,
+    };
+    const result = validateCustomExportPayload(makeValidPayload({ exportOptions }));
+    expect(result.ok).toBe(true);
   });
 
   it("rejects image design without physical custom item size", () => {

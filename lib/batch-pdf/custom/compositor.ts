@@ -1,7 +1,14 @@
 import { PDFDocument, rgb } from "pdf-lib";
 import type { PDFFont, PDFPage } from "pdf-lib";
 import { normalizedRectToPoints } from "./coordinates.ts";
+import { calculateCropMarks } from "./crop-marks.ts";
+import {
+  measurementToPoints,
+  resolveExportItemSizePoints,
+  resolveSheetPageSizePoints,
+} from "./export-options.ts";
 import { resolveDesignItemSizeForPreflight } from "./preflight.ts";
+import { calculateSheetLayout } from "./sheet-layout.ts";
 import { resolveTextFit } from "./text-fit.ts";
 import { estimateTextBlockHeightPt } from "./text-measurement.ts";
 import {
@@ -20,66 +27,265 @@ export type CustomRenderInput = {
   exportOptions: ExportOptions;
 };
 
+// Item rectangle in top-left logical points (y measured from the page top).
+export type ItemRect = {
+  xPt: number;
+  yPt: number;
+  widthPt: number;
+  heightPt: number;
+};
+
+type FontFactory = (
+  fontFamily: TextBoxStyle["fontFamily"],
+  fontWeight: TextBoxStyle["fontWeight"],
+) => Promise<PDFFont>;
+
+// Draws the design background into an item rectangle on the given page.
+type BackgroundDrawer = (page: PDFPage, itemRect: ItemRect) => void;
+
+// ---------------------------------------------------------------------------
+// One PDF per row (Phase 11 behavior, refactored onto the shared item renderer)
+// ---------------------------------------------------------------------------
+
 export async function renderCustomDesignPdfForRow(
   input: CustomRenderInput,
 ): Promise<Uint8Array> {
   const { designBytes, designAsset, row, fieldBoxes, exportOptions } = input;
 
+  const sizeResult = resolveDesignItemSizeForPreflight({
+    design: designAsset,
+    exportOptions,
+  });
+
+  if (!sizeResult.ok) {
+    throw new Error(
+      "Image design requires a physical item size. Set width and height in the export options.",
+    );
+  }
+
+  const pageWidthPt = sizeResult.value.widthPt;
+  const pageHeightPt = sizeResult.value.heightPt;
+
   const outputDoc = await PDFDocument.create();
+  const page = outputDoc.addPage([pageWidthPt, pageHeightPt]);
 
-  let page: PDFPage;
-  let pageWidthPt: number;
-  let pageHeightPt: number;
+  await drawCustomDesignItemOnPage({
+    outputPdf: outputDoc,
+    page,
+    designBytes,
+    designAsset,
+    row,
+    fieldBoxes,
+    exportOptions,
+    itemRect: { xPt: 0, yPt: 0, widthPt: pageWidthPt, heightPt: pageHeightPt },
+  });
 
+  return outputDoc.save();
+}
+
+// ---------------------------------------------------------------------------
+// Print sheets — fit multiple per page
+// ---------------------------------------------------------------------------
+
+export async function renderCustomDesignPrintSheets(args: {
+  designBytes: Uint8Array;
+  designAsset: DesignAsset;
+  rows: CsvRow[];
+  fieldBoxes: CustomFieldBox[];
+  exportOptions: ExportOptions;
+}): Promise<Uint8Array> {
+  const { designBytes, designAsset, rows, fieldBoxes, exportOptions } = args;
+
+  const itemSize = resolveExportItemSizePoints({ exportOptions, designAsset });
+  if (!itemSize.ok) {
+    throw new Error("Could not resolve the item size for the print sheet.");
+  }
+
+  const pageSize = resolveSheetPageSizePoints({ exportOptions, designAsset });
+  if (!pageSize.ok) {
+    throw new Error("Could not resolve the page size for the print sheet.");
+  }
+
+  const layout = calculateSheetLayout({
+    rowCount: rows.length,
+    pageWidthPt: pageSize.value.widthPt,
+    pageHeightPt: pageSize.value.heightPt,
+    itemWidthPt: itemSize.value.widthPt,
+    itemHeightPt: itemSize.value.heightPt,
+    marginTopPt: measurementToPoints(exportOptions.marginTop, exportOptions.unit),
+    marginRightPt: measurementToPoints(exportOptions.marginRight, exportOptions.unit),
+    marginBottomPt: measurementToPoints(exportOptions.marginBottom, exportOptions.unit),
+    marginLeftPt: measurementToPoints(exportOptions.marginLeft, exportOptions.unit),
+    gapXPt: measurementToPoints(exportOptions.gapX, exportOptions.unit),
+    gapYPt: measurementToPoints(exportOptions.gapY, exportOptions.unit),
+  });
+
+  if (!layout.ok) {
+    throw new Error("Could not lay out the print sheet with these options.");
+  }
+
+  const outputPdf = await PDFDocument.create();
+  const drawBackground = await embedBackgroundDrawer(outputPdf, designBytes, designAsset);
+  const getFont = makeFontFactory(outputPdf);
+
+  // Always produce at least one (possibly empty) page so the PDF is valid.
+  const pages = layout.value.pages.length > 0 ? layout.value.pages : [{ pageIndex: 0, items: [] }];
+
+  for (const layoutPage of pages) {
+    const pdfPage = outputPdf.addPage([layout.value.pageWidthPt, layout.value.pageHeightPt]);
+
+    for (const item of layoutPage.items) {
+      const row = rows[item.rowIndex] ?? {};
+      await drawItemContent({
+        page: pdfPage,
+        drawBackground,
+        getFont,
+        row,
+        fieldBoxes,
+        exportOptions,
+        itemRect: {
+          xPt: item.xPt,
+          yPt: item.yPt,
+          widthPt: item.widthPt,
+          heightPt: item.heightPt,
+        },
+      });
+    }
+  }
+
+  return outputPdf.save();
+}
+
+// ---------------------------------------------------------------------------
+// Reusable item renderer
+// ---------------------------------------------------------------------------
+
+export async function drawCustomDesignItemOnPage(args: {
+  outputPdf: PDFDocument;
+  page: PDFPage;
+  designBytes: Uint8Array;
+  designAsset: DesignAsset;
+  row: CsvRow;
+  fieldBoxes: CustomFieldBox[];
+  exportOptions: ExportOptions;
+  itemRect: ItemRect;
+}): Promise<void> {
+  const { outputPdf, page, designBytes, designAsset, row, fieldBoxes, exportOptions, itemRect } =
+    args;
+
+  const drawBackground = await embedBackgroundDrawer(outputPdf, designBytes, designAsset);
+  const getFont = makeFontFactory(outputPdf);
+
+  await drawItemContent({
+    page,
+    drawBackground,
+    getFont,
+    row,
+    fieldBoxes,
+    exportOptions,
+    itemRect,
+  });
+}
+
+async function drawItemContent(args: {
+  page: PDFPage;
+  drawBackground: BackgroundDrawer;
+  getFont: FontFactory;
+  row: CsvRow;
+  fieldBoxes: CustomFieldBox[];
+  exportOptions: ExportOptions;
+  itemRect: ItemRect;
+}): Promise<void> {
+  const { page, drawBackground, getFont, row, fieldBoxes, exportOptions, itemRect } = args;
+
+  drawBackground(page, itemRect);
+
+  await drawFieldBoxesInRect({
+    page,
+    pageHeightPt: page.getHeight(),
+    row,
+    fieldBoxes,
+    itemRect,
+    getFont,
+  });
+
+  if (exportOptions.cropMarks) {
+    const bottomLeftY = page.getHeight() - itemRect.yPt - itemRect.heightPt;
+    const lines = calculateCropMarks({
+      xPt: itemRect.xPt,
+      yPt: bottomLeftY,
+      widthPt: itemRect.widthPt,
+      heightPt: itemRect.heightPt,
+    });
+
+    for (const line of lines) {
+      page.drawLine({
+        start: { x: line.x1, y: line.y1 },
+        end: { x: line.x2, y: line.y2 },
+        thickness: 0.5,
+        color: rgb(0, 0, 0),
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Background embedding
+// ---------------------------------------------------------------------------
+
+async function embedBackgroundDrawer(
+  outputPdf: PDFDocument,
+  designBytes: Uint8Array,
+  designAsset: DesignAsset,
+): Promise<BackgroundDrawer> {
   if (designAsset.kind === "pdf") {
     const designDoc = await PDFDocument.load(designBytes);
-    const designPages = designDoc.getPages();
 
-    if (designPages.length === 0) {
+    if (designDoc.getPageCount() === 0) {
       throw new Error("Design PDF has no pages.");
     }
 
-    const { width, height } = designPages[0].getSize();
-    pageWidthPt = width;
-    pageHeightPt = height;
+    const [embeddedPage] = await outputPdf.embedPdf(designDoc, [0]);
 
-    const [embeddedPage] = await outputDoc.embedPdf(designDoc, [0]);
-    page = outputDoc.addPage([pageWidthPt, pageHeightPt]);
-    page.drawPage(embeddedPage, { x: 0, y: 0, width: pageWidthPt, height: pageHeightPt });
-  } else {
-    const sizeResult = resolveDesignItemSizeForPreflight({
-      design: designAsset,
-      exportOptions,
-    });
-
-    if (!sizeResult.ok) {
-      throw new Error(
-        "Image design requires a physical item size. Set width and height in the preflight panel.",
-      );
-    }
-
-    pageWidthPt = sizeResult.value.widthPt;
-    pageHeightPt = sizeResult.value.heightPt;
-    page = outputDoc.addPage([pageWidthPt, pageHeightPt]);
-
-    const image =
-      designAsset.kind === "png"
-        ? await outputDoc.embedPng(designBytes)
-        : await outputDoc.embedJpg(designBytes);
-
-    page.drawImage(image, { x: 0, y: 0, width: pageWidthPt, height: pageHeightPt });
+    return (page, itemRect) => {
+      const bottomLeftY = page.getHeight() - itemRect.yPt - itemRect.heightPt;
+      page.drawPage(embeddedPage, {
+        x: itemRect.xPt,
+        y: bottomLeftY,
+        width: itemRect.widthPt,
+        height: itemRect.heightPt,
+      });
+    };
   }
 
-  await drawFieldBoxesOnPage(
-    outputDoc,
-    page,
-    row,
-    fieldBoxes,
-    pageWidthPt,
-    pageHeightPt,
-  );
+  const image =
+    designAsset.kind === "png"
+      ? await outputPdf.embedPng(designBytes)
+      : await outputPdf.embedJpg(designBytes);
 
-  return outputDoc.save();
+  return (page, itemRect) => {
+    const bottomLeftY = page.getHeight() - itemRect.yPt - itemRect.heightPt;
+    page.drawImage(image, {
+      x: itemRect.xPt,
+      y: bottomLeftY,
+      width: itemRect.widthPt,
+      height: itemRect.heightPt,
+    });
+  };
+}
+
+function makeFontFactory(doc: PDFDocument): FontFactory {
+  const fontCache = new Map<string, PDFFont>();
+
+  return async (fontFamily, fontWeight) => {
+    const cacheKey = `${fontFamily}/${fontWeight}`;
+    const cached = fontCache.get(cacheKey);
+    if (cached) return cached;
+    const fontName = resolvePdfFontName({ fontFamily, fontWeight });
+    const font = await doc.embedFont(fontName);
+    fontCache.set(cacheKey, font);
+    return font;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -91,28 +297,22 @@ function getRawTextForBox(row: CsvRow, box: CustomFieldBox): string {
   return row[box.source.column] ?? "";
 }
 
-async function drawFieldBoxesOnPage(
-  doc: PDFDocument,
-  page: PDFPage,
-  row: CsvRow,
-  fieldBoxes: CustomFieldBox[],
-  pageWidthPt: number,
-  pageHeightPt: number,
-): Promise<void> {
-  const fontCache = new Map<string, PDFFont>();
-
-  async function getFont(
-    fontFamily: TextBoxStyle["fontFamily"],
-    fontWeight: TextBoxStyle["fontWeight"],
-  ): Promise<PDFFont> {
-    const cacheKey = `${fontFamily}/${fontWeight}`;
-    const cached = fontCache.get(cacheKey);
-    if (cached) return cached;
-    const fontName = resolvePdfFontName({ fontFamily, fontWeight });
-    const font = await doc.embedFont(fontName);
-    fontCache.set(cacheKey, font);
-    return font;
-  }
+/**
+ * Draws each field box's text inside the given item rectangle.
+ *
+ * Field box rects are normalized relative to the item, not the full page.
+ * Browser/editor coordinates use a top-left origin; pdf-lib uses bottom-left,
+ * so the y axis is inverted here using the full page height.
+ */
+async function drawFieldBoxesInRect(args: {
+  page: PDFPage;
+  pageHeightPt: number;
+  row: CsvRow;
+  fieldBoxes: CustomFieldBox[];
+  itemRect: ItemRect;
+  getFont: FontFactory;
+}): Promise<void> {
+  const { page, pageHeightPt, row, fieldBoxes, itemRect, getFont } = args;
 
   for (const box of fieldBoxes) {
     const rawText = getRawTextForBox(row, box);
@@ -122,19 +322,21 @@ async function drawFieldBoxesOnPage(
       continue;
     }
 
-    // Convert normalized rect to physical coordinates in pdf-lib space.
-    // normalizedRectToPoints returns x,y where y is from page TOP (browser origin).
-    const physRect = normalizedRectToPoints({
+    // Convert normalized rect (relative to the item) into item-local points.
+    const localRect = normalizedRectToPoints({
       rect: box.rect,
-      pageWidthPt,
-      pageHeightPt,
+      pageWidthPt: itemRect.widthPt,
+      pageHeightPt: itemRect.heightPt,
     });
 
-    const boxX = physRect.x;
-    // Convert top-left y to bottom-left y for pdf-lib.
-    const boxY = pageHeightPt - physRect.y - physRect.height;
-    const boxWidth = physRect.width;
-    const boxHeight = physRect.height;
+    // Offset by the item's position within the page, then invert y for pdf-lib.
+    const absXFromLeft = itemRect.xPt + localRect.x;
+    const absYFromTop = itemRect.yPt + localRect.y;
+
+    const boxX = absXFromLeft;
+    const boxY = pageHeightPt - absYFromTop - localRect.height;
+    const boxWidth = localRect.width;
+    const boxHeight = localRect.height;
 
     const fitResult = resolveTextFit({
       text: rawText,
@@ -165,7 +367,6 @@ async function drawFieldBoxesOnPage(
         lineHeight: box.style.lineHeight,
       });
 
-      // Compute y start from calculateTextStartPosition (x handled per line).
       const { y: startY } = calculateTextStartPosition({
         boxX,
         boxY,
@@ -183,7 +384,7 @@ async function drawFieldBoxesOnPage(
         if (!lineText) continue;
 
         const lineWidth = font.widthOfTextAtSize(lineText, fontSize);
-        const lineX = resolveLineX(lineText, lineWidth, boxX, boxWidth, box.style.align);
+        const lineX = resolveLineX(lineWidth, boxX, boxWidth, box.style.align);
         const lineY = startY - i * lineHeightPt;
 
         page.drawText(lineText, {
@@ -223,7 +424,6 @@ async function drawFieldBoxesOnPage(
 }
 
 function resolveLineX(
-  _lineText: string,
   lineWidth: number,
   boxX: number,
   boxWidth: number,

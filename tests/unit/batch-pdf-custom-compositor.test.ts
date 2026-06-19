@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
-import { renderCustomDesignPdfForRow } from "../../lib/batch-pdf/custom/compositor.ts";
+import {
+  renderCustomDesignPdfForRow,
+  renderCustomDesignPrintSheets,
+} from "../../lib/batch-pdf/custom/compositor.ts";
 import { createDefaultTextBoxStyle } from "../../lib/batch-pdf/custom/field-boxes.ts";
 import { createDefaultExportOptions } from "../../lib/batch-pdf/custom/export-options.ts";
 import type { CustomFieldBox, DesignAsset, ExportOptions } from "../../lib/batch-pdf/custom/types.ts";
@@ -293,5 +296,84 @@ describe("renderCustomDesignPdfForRow", () => {
         exportOptions: createDefaultExportOptions(),
       }),
     ).resolves.toBeInstanceOf(Uint8Array);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Print-sheet rendering
+// ---------------------------------------------------------------------------
+
+function makeSheetOptions(overrides: Partial<ExportOptions> = {}): ExportOptions {
+  return {
+    ...createDefaultExportOptions(),
+    layoutMode: "fitMultiplePerPage",
+    outputMode: "printSheetsZip",
+    pageSize: "letter",
+    itemSizeMode: "custom",
+    customItemWidth: 2,
+    customItemHeight: 1,
+    unit: "in",
+    ...overrides,
+  };
+}
+
+describe("renderCustomDesignPrintSheets", () => {
+  it("renders multiple PDF-design items on a single sheet page", async () => {
+    const pdfBytes = await makeMinimalPdfBytes();
+
+    const bytes = await renderCustomDesignPrintSheets({
+      designBytes: pdfBytes,
+      designAsset: makePdfDesignAsset(),
+      rows: [{ name: "Alice" }, { name: "Bob" }, { name: "Carol" }],
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeSheetOptions(),
+    });
+
+    expect(bytes.length).toBeGreaterThan(0);
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBe(1);
+  });
+
+  it("spreads items across multiple sheet pages when needed", async () => {
+    const pdfBytes = await makeMinimalPdfBytes();
+
+    // Item 5x4in on Letter with default margins/gaps → 2 items per page.
+    const bytes = await renderCustomDesignPrintSheets({
+      designBytes: pdfBytes,
+      designAsset: makePdfDesignAsset(),
+      rows: [{ name: "A" }, { name: "B" }, { name: "C" }],
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeSheetOptions({ customItemWidth: 5, customItemHeight: 4 }),
+    });
+
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBe(2);
+  });
+
+  it("renders an image design print sheet without throwing", async () => {
+    const bytes = await renderCustomDesignPrintSheets({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      rows: [{ name: "Alice" }, { name: "Bob" }],
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeSheetOptions(),
+    });
+
+    expect(bytes.length).toBeGreaterThan(0);
+    await expect(PDFDocument.load(bytes)).resolves.toBeTruthy();
+  });
+
+  it("renders crop marks without breaking the sheet PDF", async () => {
+    const pdfBytes = await makeMinimalPdfBytes();
+
+    const bytes = await renderCustomDesignPrintSheets({
+      designBytes: pdfBytes,
+      designAsset: makePdfDesignAsset(),
+      rows: [{ name: "Alice" }, { name: "Bob" }],
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeSheetOptions({ cropMarks: true }),
+    });
+
+    await expect(PDFDocument.load(bytes)).resolves.toBeTruthy();
   });
 });

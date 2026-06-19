@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useEffect } from "react";
 import { PreflightSummary } from "./PreflightSummary";
 import { PreflightIssueList } from "./PreflightIssueList";
 import { runCustomDesignPreflight } from "@/lib/batch-pdf/custom/preflight";
-import { createDefaultExportOptions } from "@/lib/batch-pdf/custom/export-options";
 import type {
   CustomFieldBox,
   DesignAsset,
@@ -20,7 +19,9 @@ type Props = {
   rows: CsvRow[];
   csvHeaders: string[];
   fieldBoxes: CustomFieldBox[];
-  onExportOptionsChange?: (options: ExportOptions) => void;
+  // Export options are owned by the parent; this panel only displays results
+  // computed against them so preflight and export share one source of truth.
+  exportOptions: ExportOptions;
   onPreflightResultChange?: (result: CustomDesignPreflightResult | null) => void;
 };
 
@@ -29,35 +30,9 @@ export function CustomPreflightPanel({
   rows,
   csvHeaders,
   fieldBoxes,
-  onExportOptionsChange,
+  exportOptions,
   onPreflightResultChange,
 }: Props) {
-  const isImageDesign = design.intrinsicUnit === "px";
-
-  const [widthIn, setWidthIn] = useState("");
-  const [heightIn, setHeightIn] = useState("");
-
-  const exportOptions = useMemo((): ExportOptions => {
-    if (!isImageDesign) return createDefaultExportOptions();
-    const w = parseFloat(widthIn);
-    const h = parseFloat(heightIn);
-    if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
-      return {
-        ...createDefaultExportOptions(),
-        itemSizeMode: "custom",
-        customItemWidth: w,
-        customItemHeight: h,
-        unit: "in",
-      };
-    }
-    return createDefaultExportOptions();
-  }, [isImageDesign, widthIn, heightIn]);
-
-  // Notify parent whenever export options change.
-  useEffect(() => {
-    onExportOptionsChange?.(exportOptions);
-  }, [exportOptions, onExportOptionsChange]);
-
   const preflightResult = useMemo(() => {
     if (rows.length === 0) return null;
 
@@ -98,42 +73,6 @@ export function CustomPreflightPanel({
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         Preflight
       </p>
-
-      {isImageDesign ? (
-        <div className="space-y-2">
-          <p className="text-xs leading-5 text-muted-foreground">
-            Enter the intended print size so text fit can be checked.
-          </p>
-          <div className="flex gap-2">
-            <div className="flex-1 space-y-1">
-              <label className="text-xs text-muted-foreground">Width (in)</label>
-              <input
-                type="number"
-                min="0.5"
-                max="48"
-                step="0.125"
-                value={widthIn}
-                onChange={(e) => setWidthIn(e.target.value)}
-                placeholder="e.g. 11"
-                className="w-full rounded border border-line bg-background px-2 py-1 text-sm"
-              />
-            </div>
-            <div className="flex-1 space-y-1">
-              <label className="text-xs text-muted-foreground">Height (in)</label>
-              <input
-                type="number"
-                min="0.5"
-                max="48"
-                step="0.125"
-                value={heightIn}
-                onChange={(e) => setHeightIn(e.target.value)}
-                placeholder="e.g. 8.5"
-                className="w-full rounded border border-line bg-background px-2 py-1 text-sm"
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <PreflightSummary result={preflightResult} />
 

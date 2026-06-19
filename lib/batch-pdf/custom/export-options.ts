@@ -1,6 +1,8 @@
 import { CUSTOM_DESIGN_LIMITS } from "../limits.ts";
 import type { Result } from "../types.ts";
+import { calculateSheetLayout } from "./sheet-layout.ts";
 import type {
+  DesignAsset,
   ExportOptions,
   MeasurementUnit,
   PageSizeKey,
@@ -53,7 +55,13 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function orientSize(widthPt: number, heightPt: number, orientation: ExportOptions["orientation"]) {
+export function applyOrientation(args: {
+  widthPt: number;
+  heightPt: number;
+  orientation: "portrait" | "landscape";
+}): { widthPt: number; heightPt: number } {
+  const { widthPt, heightPt, orientation } = args;
+
   if (orientation === "portrait") {
     return {
       widthPt: Math.min(widthPt, heightPt),
@@ -65,6 +73,10 @@ function orientSize(widthPt: number, heightPt: number, orientation: ExportOption
     widthPt: Math.max(widthPt, heightPt),
     heightPt: Math.min(widthPt, heightPt),
   };
+}
+
+function orientSize(widthPt: number, heightPt: number, orientation: ExportOptions["orientation"]) {
+  return applyOrientation({ widthPt, heightPt, orientation });
 }
 
 function measurementToInches(value: number, unit: MeasurementUnit): number {
@@ -176,6 +188,119 @@ export function resolveExportPageSizePoints(options: ExportOptions): Result<{
   };
 }
 
+function hasValidCustomItemSize(options: ExportOptions): boolean {
+  return (
+    options.itemSizeMode === "custom" &&
+    isFiniteNumber(options.customItemWidth) &&
+    options.customItemWidth > 0 &&
+    isFiniteNumber(options.customItemHeight) &&
+    options.customItemHeight > 0
+  );
+}
+
+/**
+ * Resolves the physical item size (single design footprint) in PDF points.
+ *
+ * - `fromDesign` uses the design's intrinsic dimensions when they are already
+ *   in PDF points (PDF designs). Image designs (pixels) cannot be treated as
+ *   physical points and require a custom item size.
+ * - `custom` uses the user-supplied width/height converted from the chosen unit.
+ */
+export function resolveExportItemSizePoints(args: {
+  exportOptions: ExportOptions;
+  designAsset: DesignAsset;
+}): Result<{
+  widthPt: number;
+  heightPt: number;
+  source: "sameAsDesign" | "customItemSize";
+}> {
+  const { exportOptions, designAsset } = args;
+
+  if (exportOptions.itemSizeMode === "custom") {
+    if (!hasValidCustomItemSize(exportOptions)) {
+      return error(
+        "custom_export_invalid_custom_item_size",
+        "Enter a valid custom item width and height.",
+      );
+    }
+
+    return {
+      ok: true,
+      value: {
+        widthPt: measurementToPoints(exportOptions.customItemWidth as number, exportOptions.unit),
+        heightPt: measurementToPoints(exportOptions.customItemHeight as number, exportOptions.unit),
+        source: "customItemSize",
+      },
+    };
+  }
+
+  // fromDesign
+  if (designAsset.intrinsicUnit === "pt") {
+    return {
+      ok: true,
+      value: {
+        widthPt: designAsset.intrinsicWidth,
+        heightPt: designAsset.intrinsicHeight,
+        source: "sameAsDesign",
+      },
+    };
+  }
+
+  return error(
+    "needs_output_size",
+    "Image designs use pixels. Enter the intended print size so export dimensions match.",
+  );
+}
+
+/**
+ * Resolves the print-sheet page size in PDF points, including the
+ * `sameAsDesign` case which depends on the design asset.
+ */
+export function resolveSheetPageSizePoints(args: {
+  exportOptions: ExportOptions;
+  designAsset: DesignAsset;
+}): Result<{
+  widthPt: number;
+  heightPt: number;
+  source: "sameAsDesign" | "commonPageSize" | "customPageSize";
+}> {
+  const { exportOptions, designAsset } = args;
+
+  if (exportOptions.pageSize === "sameAsDesign") {
+    const itemSize = resolveExportItemSizePoints({ exportOptions, designAsset });
+
+    if (!itemSize.ok) {
+      return itemSize;
+    }
+
+    return {
+      ok: true,
+      value: {
+        ...applyOrientation({
+          widthPt: itemSize.value.widthPt,
+          heightPt: itemSize.value.heightPt,
+          orientation: exportOptions.orientation,
+        }),
+        source: "sameAsDesign",
+      },
+    };
+  }
+
+  const pageResult = resolveExportPageSizePoints(exportOptions);
+
+  if (!pageResult.ok) {
+    return pageResult;
+  }
+
+  return {
+    ok: true,
+    value: {
+      ...pageResult.value,
+      source: exportOptions.pageSize === "custom" ? "customPageSize" : "commonPageSize",
+    },
+  };
+}
+
 export function createDefaultExportOptions(): ExportOptions {
   return {
     outputMode: "individualPdfsZip",
@@ -198,6 +323,7 @@ export function createDefaultExportOptions(): ExportOptions {
 export function validateExportOptions(
   options: ExportOptions,
   csvHeaders: string[] = [],
+  designAsset?: DesignAsset,
 ): Result<ExportOptions> {
   if (
     options.outputMode !== "individualPdfsZip" &&
@@ -274,6 +400,42 @@ export function validateExportOptions(
       "custom_export_unknown_filename_column",
       "The selected filename column no longer exists.",
     );
+  }
+
+  // When a design asset is supplied we can fully resolve sizes and confirm that
+  // a print-sheet layout actually fits at least one item per page.
+  if (designAsset) {
+    const itemSize = resolveExportItemSizePoints({ exportOptions: options, designAsset });
+
+    if (!itemSize.ok) {
+      return itemSize as Result<ExportOptions>;
+    }
+
+    if (options.layoutMode === "fitMultiplePerPage") {
+      const pageSize = resolveSheetPageSizePoints({ exportOptions: options, designAsset });
+
+      if (!pageSize.ok) {
+        return pageSize as Result<ExportOptions>;
+      }
+
+      const layout = calculateSheetLayout({
+        rowCount: 1,
+        pageWidthPt: pageSize.value.widthPt,
+        pageHeightPt: pageSize.value.heightPt,
+        itemWidthPt: itemSize.value.widthPt,
+        itemHeightPt: itemSize.value.heightPt,
+        marginTopPt: measurementToPoints(options.marginTop, options.unit),
+        marginRightPt: measurementToPoints(options.marginRight, options.unit),
+        marginBottomPt: measurementToPoints(options.marginBottom, options.unit),
+        marginLeftPt: measurementToPoints(options.marginLeft, options.unit),
+        gapXPt: measurementToPoints(options.gapX, options.unit),
+        gapYPt: measurementToPoints(options.gapY, options.unit),
+      });
+
+      if (!layout.ok) {
+        return layout as Result<ExportOptions>;
+      }
+    }
   }
 
   return { ok: true, value: options };

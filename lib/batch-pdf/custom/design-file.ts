@@ -3,14 +3,12 @@ import type { Result } from "../types.ts";
 import type { DesignAsset, DesignFileKind } from "./types.ts";
 
 const extensionToKind: Record<string, DesignFileKind> = {
-  ".pdf": "pdf",
   ".png": "png",
   ".jpg": "jpeg",
   ".jpeg": "jpeg",
 };
 
 const mimeTypeToKind: Record<string, DesignFileKind> = {
-  "application/pdf": "pdf",
   "image/png": "png",
   "image/jpeg": "jpeg",
 };
@@ -52,7 +50,7 @@ export function validateDesignFileMetadata(args: {
   if (!extensionKind) {
     return safeError(
       "custom_design_unsupported_file",
-      "Upload a PDF, PNG, JPG, or JPEG design file.",
+      "Upload a PNG, JPG, or JPEG design file.",
     );
   }
 
@@ -73,7 +71,7 @@ export function validateDesignFileMetadata(args: {
     if (!mimeTypeKind) {
       return safeError(
         "custom_design_unsupported_file",
-        "Upload a PDF, PNG, JPG, or JPEG design file.",
+        "Upload a PNG, JPG, or JPEG design file.",
       );
     }
 
@@ -113,29 +111,6 @@ export function validateDesignAsset(design: DesignAsset): Result<DesignAsset> {
   }
 
   if (
-    design.pageCount !== undefined &&
-    (!Number.isInteger(design.pageCount) ||
-      design.pageCount < 1 ||
-      design.pageCount > CUSTOM_DESIGN_LIMITS.maxPdfPagesAccepted)
-  ) {
-    return safeError(
-      "custom_design_page_count_unsupported",
-      "This custom design supports one PDF page for now.",
-    );
-  }
-
-  if (
-    !Number.isInteger(design.selectedPageIndex) ||
-    design.selectedPageIndex < 0 ||
-    (design.pageCount !== undefined && design.selectedPageIndex >= design.pageCount)
-  ) {
-    return safeError(
-      "custom_design_invalid_selected_page",
-      "Choose a valid design page.",
-    );
-  }
-
-  if (
     !isPositiveFiniteNumber(design.intrinsicWidth) ||
     !isPositiveFiniteNumber(design.intrinsicHeight) ||
     !isPositiveFiniteNumber(design.aspectRatio)
@@ -146,7 +121,7 @@ export function validateDesignAsset(design: DesignAsset): Result<DesignAsset> {
     );
   }
 
-  if (design.intrinsicUnit !== "px" && design.intrinsicUnit !== "pt") {
+  if (design.intrinsicUnit !== "px") {
     return safeError(
       "custom_design_invalid_dimensions",
       "This design has invalid dimensions.",

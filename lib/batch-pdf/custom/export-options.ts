@@ -201,9 +201,8 @@ function hasValidCustomItemSize(options: ExportOptions): boolean {
 /**
  * Resolves the physical item size (single design footprint) in PDF points.
  *
- * - `fromDesign` uses the design's intrinsic dimensions when they are already
- *   in PDF points (PDF designs). Image designs (pixels) cannot be treated as
- *   physical points and require a custom item size.
+ * - `fromDesign` cannot resolve image designs because pixels are not a
+ *   physical print size. Image designs require a custom item size.
  * - `custom` uses the user-supplied width/height converted from the chosen unit.
  */
 export function resolveExportItemSizePoints(args: {
@@ -212,44 +211,27 @@ export function resolveExportItemSizePoints(args: {
 }): Result<{
   widthPt: number;
   heightPt: number;
-  source: "sameAsDesign" | "customItemSize";
+  source: "customItemSize";
 }> {
-  const { exportOptions, designAsset } = args;
+  const { exportOptions } = args;
 
-  if (exportOptions.itemSizeMode === "custom") {
-    if (!hasValidCustomItemSize(exportOptions)) {
-      return error(
-        "custom_export_invalid_custom_item_size",
-        "Enter a valid custom item width and height.",
-      );
-    }
-
-    return {
-      ok: true,
-      value: {
-        widthPt: measurementToPoints(exportOptions.customItemWidth as number, exportOptions.unit),
-        heightPt: measurementToPoints(exportOptions.customItemHeight as number, exportOptions.unit),
-        source: "customItemSize",
-      },
-    };
+  // Image designs are measured in pixels, which are not a physical size, so a
+  // custom item size is always required (there is no "from design" points).
+  if (!hasValidCustomItemSize(exportOptions)) {
+    return error(
+      "needs_output_size",
+      "Image designs use pixels. Enter the intended print size so export dimensions match.",
+    );
   }
 
-  // fromDesign
-  if (designAsset.intrinsicUnit === "pt") {
-    return {
-      ok: true,
-      value: {
-        widthPt: designAsset.intrinsicWidth,
-        heightPt: designAsset.intrinsicHeight,
-        source: "sameAsDesign",
-      },
-    };
-  }
-
-  return error(
-    "needs_output_size",
-    "Image designs use pixels. Enter the intended print size so export dimensions match.",
-  );
+  return {
+    ok: true,
+    value: {
+      widthPt: measurementToPoints(exportOptions.customItemWidth as number, exportOptions.unit),
+      heightPt: measurementToPoints(exportOptions.customItemHeight as number, exportOptions.unit),
+      source: "customItemSize",
+    },
+  };
 }
 
 /**
@@ -303,7 +285,6 @@ export function resolveSheetPageSizePoints(args: {
 
 export function createDefaultExportOptions(): ExportOptions {
   return {
-    outputMode: "individualPdfsZip",
     pageSize: "sameAsDesign",
     orientation: "portrait",
     layoutMode: "onePerPage",
@@ -325,13 +306,6 @@ export function validateExportOptions(
   csvHeaders: string[] = [],
   designAsset?: DesignAsset,
 ): Result<ExportOptions> {
-  if (
-    options.outputMode !== "individualPdfsZip" &&
-    options.outputMode !== "printSheetsZip"
-  ) {
-    return error("custom_export_invalid_output_mode", "Choose a supported output mode.");
-  }
-
   if (options.orientation !== "portrait" && options.orientation !== "landscape") {
     return error("custom_export_invalid_orientation", "Choose a supported orientation.");
   }

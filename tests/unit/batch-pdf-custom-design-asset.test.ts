@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   createImageDesignAsset,
-  createPdfDesignAsset,
   formatAspectRatio,
   formatFileSize,
 } from "../../lib/batch-pdf/custom/design-asset.ts";
@@ -44,27 +43,6 @@ describe("custom design asset helpers", () => {
     }
   });
 
-  it("creates a PDF design asset from valid single-page metadata", () => {
-    const result = createPdfDesignAsset({
-      fileName: "design.pdf",
-      sizeBytes: 4096,
-      pageCount: 1,
-      selectedPageIndex: 0,
-      pageWidthPt: 612,
-      pageHeightPt: 792,
-    });
-
-    expect(result.ok).toBe(true);
-
-    if (result.ok) {
-      expect(result.value.kind).toBe("pdf");
-      expect(result.value.intrinsicUnit).toBe("pt");
-      expect(result.value.pageCount).toBe(1);
-      expect(result.value.selectedPageIndex).toBe(0);
-      expect(result.value.aspectRatio).toBeCloseTo(612 / 792, 4);
-    }
-  });
-
   it("rejects zero image width", () => {
     const result = createImageDesignAsset({
       kind: "png",
@@ -99,36 +77,6 @@ describe("custom design asset helpers", () => {
     });
 
     expect(result.ok).toBe(false);
-  });
-
-  it("rejects PDF page count below 1", () => {
-    const result = createPdfDesignAsset({
-      fileName: "design.pdf",
-      sizeBytes: 1,
-      pageCount: 0,
-      selectedPageIndex: 0,
-      pageWidthPt: 612,
-      pageHeightPt: 792,
-    });
-
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects PDF page count above the current one-page limit", () => {
-    const result = createPdfDesignAsset({
-      fileName: "design.pdf",
-      sizeBytes: 1,
-      pageCount: 2,
-      selectedPageIndex: 0,
-      pageWidthPt: 612,
-      pageHeightPt: 792,
-    });
-
-    expect(result.ok).toBe(false);
-
-    if (!result.ok) {
-      expect(result.errors[0].message).toBe("For now, upload a one-page PDF design.");
-    }
   });
 
   it("computes aspect ratio correctly", () => {

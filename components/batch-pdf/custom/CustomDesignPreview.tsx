@@ -2,12 +2,11 @@
 
 /* eslint-disable @next/next/no-img-element -- Local object URLs cannot be optimized by next/image. */
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import {
   createImageDesignAsset,
 } from "@/lib/batch-pdf/custom/design-asset";
 import { validateDesignFileMetadata } from "@/lib/batch-pdf/custom/design-file";
-import { renderPdfPreviewToCanvas } from "@/lib/batch-pdf/custom/pdf-preview.client";
 import type { BatchPdfError } from "@/lib/batch-pdf/types";
 import type { DesignAsset } from "@/lib/batch-pdf/custom/types";
 import type { CustomDesignPreviewStatus } from "@/lib/batch-pdf/custom/design-upload-state";
@@ -37,8 +36,6 @@ export function CustomDesignPreview({
   onErrorsChange,
   hideWhenReady = false,
 }: CustomDesignPreviewProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
   useEffect(() => {
     if (!file) {
       onPreviewUrlChange(null);
@@ -62,76 +59,24 @@ export function CustomDesignPreview({
     onErrorsChange([]);
     onStatusChange("loading");
 
-    if (metadata.value.kind === "png" || metadata.value.kind === "jpeg") {
-      const imageKind = metadata.value.kind;
-      const objectUrl = URL.createObjectURL(file);
-      const image = new Image();
+    const imageKind = metadata.value.kind;
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
 
-      onPreviewUrlChange(objectUrl);
+    onPreviewUrlChange(objectUrl);
 
-      image.onload = () => {
-        if (isCancelled) {
-          return;
-        }
-
-        const asset = createImageDesignAsset({
-          kind: imageKind,
-          fileName: file.name,
-          sizeBytes: file.size,
-          intrinsicWidth: image.naturalWidth,
-          intrinsicHeight: image.naturalHeight,
-        });
-
-        if (!asset.ok) {
-          onErrorsChange(asset.errors);
-          onStatusChange("error");
-          return;
-        }
-
-        onAssetReady(asset.value);
-        onStatusChange("ready");
-      };
-
-      image.onerror = () => {
-        if (isCancelled) {
-          return;
-        }
-
-        onErrorsChange([
-          safeError(
-            "custom_design_image_dimensions_failed",
-            "Image dimensions could not be read. Try exporting the design again.",
-          ),
-        ]);
-        onStatusChange("error");
-      };
-
-      image.src = objectUrl;
-
-      return () => {
-        isCancelled = true;
-        URL.revokeObjectURL(objectUrl);
-        onPreviewUrlChange(null);
-      };
-    }
-
-    const canvas = canvasRef.current;
-
-    if (!canvas) {
-      onErrorsChange([
-        safeError(
-          "custom_design_pdf_preview_failed",
-          "PDF preview is unavailable for this file.",
-        ),
-      ]);
-      onStatusChange("error");
-      return;
-    }
-
-    renderPdfPreviewToCanvas({ file, canvas }).then((asset) => {
+    image.onload = () => {
       if (isCancelled) {
         return;
       }
+
+      const asset = createImageDesignAsset({
+        kind: imageKind,
+        fileName: file.name,
+        sizeBytes: file.size,
+        intrinsicWidth: image.naturalWidth,
+        intrinsicHeight: image.naturalHeight,
+      });
 
       if (!asset.ok) {
         onErrorsChange(asset.errors);
@@ -141,10 +86,28 @@ export function CustomDesignPreview({
 
       onAssetReady(asset.value);
       onStatusChange("ready");
-    });
+    };
+
+    image.onerror = () => {
+      if (isCancelled) {
+        return;
+      }
+
+      onErrorsChange([
+        safeError(
+          "custom_design_image_dimensions_failed",
+          "Image dimensions could not be read. Try exporting the design again.",
+        ),
+      ]);
+      onStatusChange("error");
+    };
+
+    image.src = objectUrl;
 
     return () => {
       isCancelled = true;
+      URL.revokeObjectURL(objectUrl);
+      onPreviewUrlChange(null);
     };
   }, [
     file,
@@ -154,7 +117,6 @@ export function CustomDesignPreview({
     onStatusChange,
   ]);
 
-  const isPdf = file?.name.toLowerCase().endsWith(".pdf") ?? false;
   const isLoading = previewStatus === "loading";
   const isReady = previewStatus === "ready";
 
@@ -187,7 +149,7 @@ export function CustomDesignPreview({
             <div className="max-w-sm">
               <p className="text-sm font-semibold text-ink">No design selected</p>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Upload a PDF, PNG, JPG, or JPEG file to preview the design before adding fields.
+                Upload a PNG, JPG, or JPEG file to preview the design before adding fields.
               </p>
             </div>
           </div>
@@ -201,7 +163,7 @@ export function CustomDesignPreview({
               </div>
             ) : null}
 
-            {!isPdf && previewUrl ? (
+            {previewUrl ? (
               <img
                 src={previewUrl}
                 alt=""
@@ -212,23 +174,12 @@ export function CustomDesignPreview({
               />
             ) : null}
 
-            {isPdf ? (
-              <canvas
-                ref={canvasRef}
-                className={[
-                  "h-auto max-h-[70vh] max-w-full bg-panel shadow-sm",
-                  isReady ? "opacity-100" : "opacity-70",
-                ].join(" ")}
-                aria-label="PDF design preview"
-              />
-            ) : null}
-
             {previewStatus === "error" ? (
               <div className="absolute inset-0 flex items-center justify-center bg-muted p-6 text-center">
                 <div className="max-w-sm">
                   <p className="text-sm font-semibold text-ink">Preview unavailable</p>
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    Try a supported one-page PDF, PNG, JPG, or JPEG design.
+                    Try a supported PNG, JPG, or JPEG design.
                   </p>
                 </div>
               </div>

@@ -56,7 +56,7 @@ export function HeroCsvCard() {
       setUploadState("parsing");
       const reader = new FileReader();
       reader.onload = () => {
-        setTimeout(() => ingest(reader.result as string, file.name), 400);
+        ingest(reader.result as string, file.name);
       };
       reader.onerror = () => {
         setErrorMsg("We couldn't open that file. Try saving a fresh copy.");
@@ -90,7 +90,7 @@ export function HeroCsvCard() {
 
   const loadSample = () => {
     setUploadState("parsing");
-    setTimeout(() => ingest(HERO_SAMPLE_CSV, "sample-certificates.csv"), 400);
+    ingest(HERO_SAMPLE_CSV, "sample-certificates.csv");
   };
 
   const reset = () => {
@@ -120,7 +120,7 @@ export function HeroCsvCard() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em" }}>Start with your CSV</div>
+        <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em" }}>Start with your spreadsheet</div>
         <span
           style={{
             fontFamily: "var(--font-jetbrains-mono), monospace",
@@ -138,7 +138,7 @@ export function HeroCsvCard() {
         </span>
       </div>
       <div style={{ fontSize: 14, color: "#6E6A61", marginBottom: 18 }}>
-        Upload a CSV with one row per PDF.
+        Export your Excel or Google Sheet as CSV, then upload it here.
       </div>
 
       <input
@@ -191,10 +191,10 @@ export function HeroCsvCard() {
               </span>
             </div>
             <div style={{ fontSize: 15.5, fontWeight: 700, color: "#1A1916" }}>
-              {isDrag ? "Drop to upload" : "Drop your CSV here, or click to browse"}
+              {isDrag ? "Drop to upload" : "Drop your CSV from Excel or Google Sheets"}
             </div>
             <div style={{ fontSize: 13, color: "#8A857A", marginTop: 5 }}>
-              Comma-separated · UTF-8 · up to 5&nbsp;MB
+              One row per certificate, badge, card, or label · up to 2&nbsp;MB
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
@@ -314,7 +314,7 @@ export function HeroCsvCard() {
                 {fileName}
               </div>
               <div style={{ fontSize: 12.5, color: "#3F7A57", fontWeight: 600, marginTop: 2 }}>
-                CSV looks good — ready to design
+              Spreadsheet looks good — ready to choose a template
               </div>
             </div>
           </div>
@@ -339,7 +339,7 @@ export function HeroCsvCard() {
                 {csvResult.rowCount}
               </div>
               <div style={{ fontSize: 12, color: "#8A857A", fontWeight: 600, marginTop: 2 }}>
-                rows · one PDF each
+                rows · one finished PDF each
               </div>
             </div>
             <div

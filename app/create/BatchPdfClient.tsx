@@ -35,15 +35,21 @@ import {
   resolveExportItemSizePoints,
   resolveSheetPageSizePoints,
 } from "@/lib/batch-pdf/custom/export-options";
-import { calculateSheetLayout } from "@/lib/batch-pdf/custom/sheet-layout";
+import { calculateSheetLayout, type SheetLayoutResult } from "@/lib/batch-pdf/custom/sheet-layout";
 import { BATCH_PDF_LIMITS } from "@/lib/batch-pdf/limits";
-import type { BatchPdfError, CsvParseResult, FieldMapping } from "@/lib/batch-pdf/types";
+import type { BatchPdfError, CsvParseResult, CsvRow, FieldMapping } from "@/lib/batch-pdf/types";
 import type { CustomFieldBox, DesignAsset, ExportOptions } from "@/lib/batch-pdf/custom/types";
 import type { CustomDesignPreflightResult } from "@/lib/batch-pdf/custom/preflight";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type BatchPdfStep = "choose-design" | "setup-design" | "mapping" | "preview" | "export";
+type BatchPdfStep =
+  | "choose-design"
+  | "setup-design"
+  | "mapping"
+  | "preview"
+  | "export-options"
+  | "export";
 type WorkflowMode = "starterTemplate" | "customDesign";
 type ExportStatus = "idle" | "loading" | "success" | "error";
 
@@ -62,7 +68,7 @@ type SessionState = {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STEP_ORDER: BatchPdfStep[] = [
+const STARTER_STEP_ORDER: BatchPdfStep[] = [
   "choose-design",
   "setup-design",
   "mapping",
@@ -70,7 +76,23 @@ const STEP_ORDER: BatchPdfStep[] = [
   "export",
 ];
 
-const STEP_LABELS = ["Choose design", "Set up design", "Map fields", "Preview", "Export"];
+const CUSTOM_STEP_ORDER: BatchPdfStep[] = [
+  "choose-design",
+  "setup-design",
+  "mapping",
+  "preview",
+  "export-options",
+  "export",
+];
+
+const STEP_LABELS: Record<BatchPdfStep, string> = {
+  "choose-design": "Choose design",
+  "setup-design": "Set up design",
+  mapping: "Map fields",
+  preview: "Preview",
+  "export-options": "Export setup",
+  export: "Export",
+};
 
 // ── Shared style helpers ──────────────────────────────────────────────────────
 
@@ -100,6 +122,220 @@ const SUBTEXT: React.CSSProperties = {
   color: "#57534A",
   margin: "0 0 22px",
 };
+
+function HelpfulTip({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 9,
+        background: "#FFFAEB",
+        border: "1px solid #F0DFA8",
+        borderRadius: 12,
+        padding: "10px 12px",
+        color: "#6E5410",
+        fontSize: 13,
+        lineHeight: 1.45,
+        ...style,
+      }}
+    >
+      <span
+        style={{
+          ...MONO,
+          flexShrink: 0,
+          borderRadius: 6,
+          background: "#FBEFCB",
+          color: "#8A6A12",
+          fontSize: 10.5,
+          fontWeight: 800,
+          letterSpacing: "0.06em",
+          padding: "3px 6px",
+          textTransform: "uppercase",
+        }}
+      >
+        Tip
+      </span>
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function ExportLoadingAnimation({
+  freeRows,
+  isPrintSheets,
+}: {
+  freeRows: number;
+  isPrintSheets: boolean;
+}) {
+  return (
+    <div style={{ textAlign: "center", padding: "18px 0 10px" }}>
+      <div
+        className="vs-export-loader"
+        aria-hidden="true"
+        style={{
+          position: "relative",
+          width: 128,
+          height: 112,
+          margin: "0 auto 20px",
+        }}
+      >
+        {[0, 1, 2].map((index) => (
+          <span
+            key={index}
+            className="vs-export-page"
+            style={{
+              position: "absolute",
+              left: 36 + index * 8,
+              top: 22 - index * 5,
+              width: 52,
+              height: 66,
+              borderRadius: 9,
+              background: "#FFFFFF",
+              border: "1px solid #E7E2D6",
+              boxShadow: "0 18px 32px -22px rgba(26,25,22,0.52)",
+              transform: `rotate(${index * 5 - 5}deg)`,
+              animationDelay: `${index * 0.16}s`,
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                left: 9,
+                right: 9,
+                top: 10,
+                height: 4,
+                borderRadius: 99,
+                background: "#F2B01E",
+              }}
+            />
+            <span
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 25,
+                width: 30,
+                height: 5,
+                borderRadius: 99,
+                background: "#E7E2D6",
+              }}
+            />
+            <span
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 38,
+                width: 22,
+                height: 5,
+                borderRadius: 99,
+                background: "#F4F1E9",
+              }}
+            />
+          </span>
+        ))}
+        <span
+          className="vs-export-spark"
+          style={{
+            position: "absolute",
+            right: 16,
+            top: 10,
+            width: 18,
+            height: 18,
+            borderRadius: 6,
+            background: "#F2B01E",
+            boxShadow: "0 0 0 8px rgba(242,176,30,0.14)",
+          }}
+        />
+        <span
+          style={{
+            position: "absolute",
+            left: 18,
+            right: 18,
+            bottom: 4,
+            height: 7,
+            borderRadius: 999,
+            background: "linear-gradient(90deg, #F2B01E, #1A1916, #F2B01E)",
+            backgroundSize: "220% 100%",
+            animation: "vsExportBar 1.4s ease-in-out infinite",
+          }}
+        />
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 800 }}>
+        Building your {isPrintSheets ? "print sheets" : "PDFs"}...
+      </div>
+      <div style={{ fontSize: 13.5, color: "#6E6A61", marginTop: 7, lineHeight: 1.45 }}>
+        Personalizing {freeRows} row{freeRows !== 1 ? "s" : ""}, checking pages, and packing the ZIP.
+      </div>
+      <div style={{ ...MONO, fontSize: 11.5, color: "#9A9486", marginTop: 12 }}>
+        This takes at least 7 seconds so the download feels steady.
+      </div>
+    </div>
+  );
+}
+
+type FinishedSizePreset = {
+  id: "letterLandscape" | "a4Landscape" | "badgeLandscape" | "custom";
+  label: string;
+  hint: string;
+  width?: number;
+  height?: number;
+};
+
+const FINISHED_SIZE_PRESETS: FinishedSizePreset[] = [
+  {
+    id: "letterLandscape",
+    label: "Letter certificate",
+    hint: "11 x 8.5 in",
+    width: 11,
+    height: 8.5,
+  },
+  {
+    id: "a4Landscape",
+    label: "A4 certificate",
+    hint: "11.7 x 8.3 in",
+    width: 11.69,
+    height: 8.27,
+  },
+  {
+    id: "badgeLandscape",
+    label: "Badge / small card",
+    hint: "4 x 3 in",
+    width: 4,
+    height: 3,
+  },
+  {
+    id: "custom",
+    label: "Custom size",
+    hint: "Enter width and height",
+  },
+];
+
+const MIN_EXPORT_LOADING_MS = 7000;
+
+type SheetLayoutInfo = {
+  layout: SheetLayoutResult;
+  pageWidthPt: number;
+  pageHeightPt: number;
+  itemWidthPt: number;
+  itemHeightPt: number;
+};
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function waitForMinimumExportLoading(startedAt: number): Promise<void> {
+  const elapsed = Date.now() - startedAt;
+  await wait(Math.max(0, MIN_EXPORT_LOADING_MS - elapsed));
+}
 
 // ── Thumbnail mini-previews ───────────────────────────────────────────────────
 
@@ -225,6 +461,312 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getFinishedSizePresetId(options: ExportOptions): FinishedSizePreset["id"] {
+  if (
+    options.unit === "in" &&
+    options.itemSizeMode === "custom" &&
+    typeof options.customItemWidth === "number" &&
+    typeof options.customItemHeight === "number"
+  ) {
+    const itemWidth = options.customItemWidth;
+    const itemHeight = options.customItemHeight;
+    const matchingPreset = FINISHED_SIZE_PRESETS.find(
+      (preset) =>
+        preset.width !== undefined &&
+        preset.height !== undefined &&
+        Math.abs(itemWidth - preset.width) < 0.03 &&
+        Math.abs(itemHeight - preset.height) < 0.03,
+    );
+
+    if (matchingPreset) {
+      return matchingPreset.id;
+    }
+  }
+
+  return "custom";
+}
+
+function getRecommendedFinishedSize(asset: DesignAsset): Pick<ExportOptions, "customItemWidth" | "customItemHeight" | "unit"> {
+  const ratio = asset.intrinsicWidth / asset.intrinsicHeight;
+
+  if (ratio > 1.2 && ratio < 1.4 && Math.max(asset.intrinsicWidth, asset.intrinsicHeight) < 1000) {
+    return { customItemWidth: 4, customItemHeight: 3, unit: "in" };
+  }
+
+  if (ratio > 1.2 && ratio < 1.4) {
+    return { customItemWidth: 11, customItemHeight: 8.5, unit: "in" };
+  }
+
+  if (ratio > 0.68 && ratio < 0.75) {
+    return { customItemWidth: 4, customItemHeight: 6, unit: "in" };
+  }
+
+  return { customItemWidth: 8.5, customItemHeight: 11, unit: "in" };
+}
+
+function getBoxText(box: CustomFieldBox, row: CsvRow): string {
+  const rawValue =
+    box.source.type === "csvColumn" ? row[box.source.column] : box.source.value;
+  const text = rawValue?.trim() ? rawValue : box.label || "Text";
+  return box.style.uppercase ? text.toUpperCase() : text;
+}
+
+function cssFontFamily(fontFamily: CustomFieldBox["style"]["fontFamily"]): string {
+  if (fontFamily === "Times") return "Times New Roman, serif";
+  if (fontFamily === "Courier") return "Courier New, monospace";
+  return "Arial, Helvetica, sans-serif";
+}
+
+function CustomDesignReviewPreview({
+  file,
+  asset,
+  boxes,
+  row,
+  rowIndex,
+  rowCount,
+  onPrevious,
+  onNext,
+}: {
+  file: File;
+  asset: DesignAsset;
+  boxes: CustomFieldBox[];
+  row: CsvRow;
+  rowIndex: number;
+  rowCount: number;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const aspectRatio = asset.intrinsicWidth / asset.intrinsicHeight;
+  const previewWidthByViewportHeight = `min(760px, 100%, max(300px, calc(${(aspectRatio * 100).toFixed(3)}vh - ${(aspectRatio * 19).toFixed(3)}rem)))`;
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    // This mirrors the uploaded File into a browser object URL and cleans it up
+    // when the preview changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <section style={{ background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 20, padding: 18, boxShadow: "0 24px 50px -34px rgba(26,25,22,0.3)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, marginBottom: 14 }}>
+        <div>
+          <div style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#9A9486", textTransform: "uppercase", letterSpacing: "0.1em" }}>Preview</div>
+          <div style={{ fontSize: 18, fontWeight: 800, marginTop: 3 }}>Check how one row looks</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button type="button" onClick={onPrevious} style={{ width: 32, height: 32, border: "1px solid #E7E2D6", background: "#fff", borderRadius: 8, fontSize: 16, color: "#4A463E", cursor: "pointer" }}>‹</button>
+          <span style={{ ...MONO, fontSize: 12, color: "#6E6A61", minWidth: 84, textAlign: "center" }}>row {rowIndex + 1} / {rowCount}</span>
+          <button type="button" onClick={onNext} style={{ width: 32, height: 32, border: "1px solid #E7E2D6", background: "#fff", borderRadius: 8, fontSize: 16, color: "#4A463E", cursor: "pointer" }}>›</button>
+        </div>
+      </div>
+
+      <div style={{ background: "#F4F1E9", border: "1px solid #EFEADF", borderRadius: 14, padding: 14 }}>
+        <div
+          style={{
+            position: "relative",
+            width: previewWidthByViewportHeight,
+            margin: "0 auto",
+            overflow: "hidden",
+            borderRadius: 8,
+            background: "#fff",
+            aspectRatio: `${asset.intrinsicWidth} / ${asset.intrinsicHeight}`,
+            boxShadow: "0 14px 34px -26px rgba(26,25,22,0.5)",
+          }}
+        >
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt="" draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#8A857A", fontSize: 13 }}>Loading preview…</div>
+          )}
+
+          {boxes.map((box) => {
+            const text = getBoxText(box, row);
+            return (
+              <div
+                key={box.id}
+                style={{
+                  position: "absolute",
+                  left: `${box.rect.x * 100}%`,
+                  top: `${box.rect.y * 100}%`,
+                  width: `${box.rect.width * 100}%`,
+                  height: `${box.rect.height * 100}%`,
+                  display: "flex",
+                  alignItems:
+                    box.style.verticalAlign === "bottom"
+                      ? "flex-end"
+                      : box.style.verticalAlign === "middle"
+                        ? "center"
+                        : "flex-start",
+                  justifyContent:
+                    box.style.align === "right"
+                      ? "flex-end"
+                      : box.style.align === "center"
+                        ? "center"
+                        : "flex-start",
+                  overflow: "hidden",
+                  padding: 2,
+                  color: box.style.color,
+                  fontFamily: cssFontFamily(box.style.fontFamily),
+                  fontWeight: box.style.fontWeight === "bold" ? 700 : 400,
+                  fontSize: "clamp(10px, 1.6vw, 24px)",
+                  lineHeight: box.style.lineHeight,
+                  textAlign: box.style.align,
+                  outline: "1px dashed rgba(242,176,30,0.65)",
+                  background: "rgba(255,255,255,0.24)",
+                }}
+              >
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: box.style.overflowMode === "wrap" ? "normal" : "nowrap" }}>
+                  {text}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CustomExportLayoutPreview({
+  exportOptions,
+  design,
+  rowCount,
+  freeRows,
+  sheetLayoutInfo,
+}: {
+  exportOptions: ExportOptions;
+  design: DesignAsset;
+  rowCount: number;
+  freeRows: number;
+  sheetLayoutInfo: SheetLayoutInfo | null;
+}) {
+  const itemSize = resolveExportItemSizePoints({ exportOptions, designAsset: design });
+  const ptToIn = (pt: number) => `${(pt / 72).toFixed(2)} in`;
+  const isPrintSheets = exportOptions.layoutMode === "fitMultiplePerPage";
+
+  if (!itemSize.ok) {
+    return (
+      <section style={{ background: "#fff", border: "1px solid #E7E2D6", borderRadius: 18, padding: 18 }}>
+        <div style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#9A9486", textTransform: "uppercase", letterSpacing: "0.1em" }}>Final page preview</div>
+        <p style={{ fontSize: 14, color: "#6E6A61", lineHeight: 1.5, margin: "10px 0 0" }}>
+          Choose a finished size on the previous step to preview the export pages.
+        </p>
+      </section>
+    );
+  }
+
+  const pageWidthPt = isPrintSheets && sheetLayoutInfo ? sheetLayoutInfo.pageWidthPt : itemSize.value.widthPt;
+  const pageHeightPt = isPrintSheets && sheetLayoutInfo ? sheetLayoutInfo.pageHeightPt : itemSize.value.heightPt;
+  const pageAspect = `${pageWidthPt} / ${pageHeightPt}`;
+  const firstPageItems = isPrintSheets
+    ? sheetLayoutInfo?.layout.pages[0]?.items.slice(0, 80) ?? []
+    : [
+        {
+          rowIndex: 0,
+          xPt: 0,
+          yPt: 0,
+          widthPt: itemSize.value.widthPt,
+          heightPt: itemSize.value.heightPt,
+        },
+      ];
+  const itemCountText = isPrintSheets && sheetLayoutInfo
+    ? `${sheetLayoutInfo.layout.itemsPerPage} per page`
+    : "1 per page";
+  const pageCountText = isPrintSheets && sheetLayoutInfo
+    ? `${sheetLayoutInfo.layout.pageCount} page${sheetLayoutInfo.layout.pageCount !== 1 ? "s" : ""}`
+    : `${freeRows} PDF${freeRows !== 1 ? "s" : ""}`;
+
+  return (
+    <section style={{ background: "#fff", border: "1px solid #E7E2D6", borderRadius: 18, padding: 18, boxShadow: "0 20px 44px -34px rgba(26,25,22,0.28)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "start", marginBottom: 14, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#9A9486", textTransform: "uppercase", letterSpacing: "0.1em" }}>Final page preview</div>
+          <h3 style={{ fontSize: 20, fontWeight: 800, margin: "5px 0 4px", letterSpacing: "-0.01em" }}>
+            {isPrintSheets ? "Multiple rows on each page" : "One row per PDF"}
+          </h3>
+          <p style={{ fontSize: 13.5, color: "#6E6A61", lineHeight: 1.5, margin: 0 }}>
+            {isPrintSheets
+              ? "The outlines show where each finished design will land on the first sheet."
+              : "Each row becomes its own PDF using the finished size from the previous step."}
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#6E6A61", background: "#F4F1E9", borderRadius: 7, padding: "5px 8px" }}>{itemCountText}</span>
+          <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#6E6A61", background: "#F4F1E9", borderRadius: 7, padding: "5px 8px" }}>{pageCountText}</span>
+        </div>
+      </div>
+
+      {isPrintSheets && !sheetLayoutInfo ? (
+        <div style={{ background: "#FBEEEA", border: "1px solid #F2C9BD", borderRadius: 12, padding: 14, color: "#8A321F", fontSize: 13.5, lineHeight: 1.5 }}>
+          This layout does not fit yet. Try a larger page, smaller margins, smaller gaps, or a smaller finished size.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 300px) 1fr", gap: 18, alignItems: "center" }} data-rcol>
+          <div style={{ background: "#F4F1E9", border: "1px solid #EFEADF", borderRadius: 14, padding: 14 }}>
+            <div
+              style={{
+                position: "relative",
+                width: "100%",
+                maxWidth: 260,
+                margin: "0 auto",
+                aspectRatio: pageAspect,
+                background: "#FFFFFF",
+                border: "1.5px solid #DAD3C4",
+                borderRadius: 8,
+                boxShadow: "0 16px 30px -24px rgba(26,25,22,0.5)",
+                overflow: "hidden",
+              }}
+            >
+              {firstPageItems.map((item) => (
+                <div
+                  key={`${item.rowIndex}-${item.xPt}-${item.yPt}`}
+                  style={{
+                    position: "absolute",
+                    left: `${(item.xPt / pageWidthPt) * 100}%`,
+                    top: `${(item.yPt / pageHeightPt) * 100}%`,
+                    width: `${(item.widthPt / pageWidthPt) * 100}%`,
+                    height: `${(item.heightPt / pageHeightPt) * 100}%`,
+                    border: "1.5px solid #F2B01E",
+                    background: "rgba(242,176,30,0.12)",
+                    borderRadius: 4,
+                    boxSizing: "border-box",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#8A6A12",
+                    fontSize: 10,
+                    fontWeight: 800,
+                  }}
+                >
+                  {item.rowIndex + 1}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: 9 }}>
+            {[
+              ["Page", `${ptToIn(pageWidthPt)} x ${ptToIn(pageHeightPt)}`],
+              ["Finished item", `${ptToIn(itemSize.value.widthPt)} x ${ptToIn(itemSize.value.heightPt)}`],
+              ["Rows in CSV", String(rowCount)],
+              ["Rows in this export", String(freeRows)],
+            ].map(([label, value]) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, borderBottom: "1px solid #F4F1E9", paddingBottom: 8 }}>
+                <span style={{ fontSize: 13, color: "#6E6A61" }}>{label}</span>
+                <span style={{ ...MONO, fontSize: 13, fontWeight: 700, color: "#1A1916", textAlign: "right" }}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function BatchPdfClient() {
@@ -246,6 +788,7 @@ export function BatchPdfClient() {
   const [starterExportError, setStarterExportError] = useState<string | null>(null);
   const [customExportStatus, setCustomExportStatus] = useState<ExportStatus>("idle");
   const [customExportError, setCustomExportError] = useState<string | null>(null);
+  const [showCustomSizeInputs, setShowCustomSizeInputs] = useState(false);
 
   // Load CSV from sessionStorage on mount; redirect if missing
   useEffect(() => {
@@ -254,6 +797,9 @@ export function BatchPdfClient() {
       router.replace("/");
       return;
     }
+    // Syncing the one-time sessionStorage handoff into local state on mount is a
+    // legitimate external-store read; this is the intended use of an effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSession((s) => ({ ...s, csv: stored.asCsvResult(), csvFileName: stored.fileName }));
   }, [router]);
 
@@ -298,7 +844,7 @@ export function BatchPdfClient() {
       session.customExportOptions.customItemHeight > 0);
 
   // Resolve a print-sheet layout preview for the current options + design.
-  const sheetLayoutInfo = useMemo(() => {
+  const sheetLayoutInfo = useMemo<SheetLayoutInfo | null>(() => {
     const design = session.customDesign.asset;
     const opts = session.customExportOptions;
     if (!design || opts.layoutMode !== "fitMultiplePerPage") return null;
@@ -329,6 +875,14 @@ export function BatchPdfClient() {
 
   const layoutCanCalculate = !isPrintSheets || sheetLayoutInfo !== null;
 
+  const isCustomTextFitReady =
+    Boolean(session.csv) &&
+    Boolean(session.customDesign.asset) &&
+    Boolean(session.customDesign.file) &&
+    session.customDesign.fieldBoxes.length > 0 &&
+    imageHasValidSize &&
+    (preflightStatus === "ready" || preflightStatus === "readyWithWarnings");
+
   const isCustomExportReady =
     Boolean(session.csv) &&
     Boolean(session.customDesign.asset) &&
@@ -345,12 +899,13 @@ export function BatchPdfClient() {
   }
 
   function buildSteps(): WizardStep[] {
-    const currentIdx = STEP_ORDER.indexOf(session.step);
+    const stepOrder = isCustomMode ? CUSTOM_STEP_ORDER : STARTER_STEP_ORDER;
+    const currentIdx = Math.max(0, stepOrder.indexOf(session.step));
     return [
       { n: 1, label: "Upload CSV", state: "complete", onClick: () => router.push("/") },
-      ...STEP_ORDER.map((stepKey, i) => ({
+      ...stepOrder.map((stepKey, i) => ({
         n: i + 2,
-        label: STEP_LABELS[i],
+        label: STEP_LABELS[stepKey],
         state: (i < currentIdx ? "complete" : i === currentIdx ? "current" : "locked") as WizardStep["state"],
         onClick: i < currentIdx ? () => goToStep(stepKey) : undefined,
       })),
@@ -364,6 +919,7 @@ export function BatchPdfClient() {
     setStarterExportError(null);
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setShowCustomSizeInputs(false);
     setSession((s) => ({
       ...s,
       step: "setup-design",
@@ -423,12 +979,20 @@ export function BatchPdfClient() {
   }
 
   function handleContinueToExport() {
+    setSession((s) => ({
+      ...s,
+      step: s.workflowMode === "customDesign" ? "export-options" : "export",
+    }));
+  }
+
+  function handleContinueToFinalExport() {
     setSession((s) => ({ ...s, step: "export" }));
   }
 
   const handleCustomDesignAcceptedFile = useCallback((file: File) => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setShowCustomSizeInputs(false);
     setSession((s) => {
       if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
       return {
@@ -443,6 +1007,7 @@ export function BatchPdfClient() {
   const handleCustomDesignRejectedFile = useCallback((errors: BatchPdfError[]) => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setShowCustomSizeInputs(false);
     setSession((s) => {
       if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
       return {
@@ -457,6 +1022,7 @@ export function BatchPdfClient() {
   const handleCustomDesignReset = useCallback(() => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setShowCustomSizeInputs(false);
     setSession((s) => {
       if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
       return {
@@ -471,13 +1037,14 @@ export function BatchPdfClient() {
   const handleCustomDesignAssetReady = useCallback((asset: DesignAsset) => {
     setSession((s) => {
       // Image designs use pixels, so "same as design" cannot resolve to physical
-      // points — preselect custom item sizing so the user just enters dimensions.
+      // points — choose a friendly best-guess print size when the shape is clear.
       const needsCustomItemSize = asset.intrinsicUnit === "px";
+      const recommendedSize = getRecommendedFinishedSize(asset);
       return {
         ...s,
         customDesign: { ...s.customDesign, asset, errors: [] },
         customExportOptions: needsCustomItemSize
-          ? { ...s.customExportOptions, itemSizeMode: "custom" }
+          ? { ...s.customExportOptions, itemSizeMode: "custom", ...recommendedSize }
           : s.customExportOptions,
       };
     });
@@ -516,7 +1083,42 @@ export function BatchPdfClient() {
   }, []);
 
   const handleCustomExportOptionsChange = useCallback((options: ExportOptions) => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
     setSession((s) => ({ ...s, customExportOptions: options }));
+  }, []);
+
+  const handleFinishedSizePresetChange = useCallback((preset: FinishedSizePreset) => {
+    setShowCustomSizeInputs(preset.id === "custom");
+
+    if (preset.id === "custom") {
+      setSession((s) => ({
+        ...s,
+        customExportOptions: {
+          ...s.customExportOptions,
+          itemSizeMode: "custom",
+          unit: "in",
+          customItemWidth:
+            s.customExportOptions.customItemWidth ??
+            (s.customDesign.asset ? getRecommendedFinishedSize(s.customDesign.asset).customItemWidth : undefined),
+          customItemHeight:
+            s.customExportOptions.customItemHeight ??
+            (s.customDesign.asset ? getRecommendedFinishedSize(s.customDesign.asset).customItemHeight : undefined),
+        },
+      }));
+      return;
+    }
+
+    setSession((s) => ({
+      ...s,
+      customExportOptions: {
+        ...s.customExportOptions,
+        itemSizeMode: "custom",
+        customItemWidth: preset.width,
+        customItemHeight: preset.height,
+        unit: "in",
+      },
+    }));
   }, []);
 
   const handleCustomPreflightResultChange = useCallback(
@@ -528,6 +1130,7 @@ export function BatchPdfClient() {
 
   async function handleStarterExport() {
     if (!session.csv || !session.selectedTemplateId) return;
+    const exportStartedAt = Date.now();
     setStarterExportStatus("loading");
     setStarterExportError(null);
     try {
@@ -542,11 +1145,13 @@ export function BatchPdfClient() {
         }),
       });
       if (!res.ok) {
+        await waitForMinimumExportLoading(exportStartedAt);
         setStarterExportStatus("error");
         setStarterExportError("Export failed. Check your mapping and try again.");
         return;
       }
       const blob = await res.blob();
+      await waitForMinimumExportLoading(exportStartedAt);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -557,6 +1162,7 @@ export function BatchPdfClient() {
       URL.revokeObjectURL(url);
       setStarterExportStatus("success");
     } catch {
+      await waitForMinimumExportLoading(exportStartedAt);
       setStarterExportStatus("error");
       setStarterExportError("Could not reach the export service. Check your connection.");
     }
@@ -565,6 +1171,7 @@ export function BatchPdfClient() {
   async function handleCustomExport() {
     const { customDesign, csv, customExportOptions } = session;
     if (!csv || !customDesign.asset || !customDesign.file) return;
+    const exportStartedAt = Date.now();
     setCustomExportStatus("loading");
     setCustomExportError(null);
     try {
@@ -586,11 +1193,13 @@ export function BatchPdfClient() {
           const body = await res.json();
           if (typeof body?.error === "string") msg = body.error;
         } catch { /* ignore */ }
+        await waitForMinimumExportLoading(exportStartedAt);
         setCustomExportError(msg);
         setCustomExportStatus("error");
         return;
       }
       const blob = await res.blob();
+      await waitForMinimumExportLoading(exportStartedAt);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -601,6 +1210,7 @@ export function BatchPdfClient() {
       URL.revokeObjectURL(url);
       setCustomExportStatus("success");
     } catch {
+      await waitForMinimumExportLoading(exportStartedAt);
       setCustomExportStatus("error");
       setCustomExportError("Something went wrong. Check your connection and try again.");
     }
@@ -618,6 +1228,9 @@ export function BatchPdfClient() {
           <strong style={{ color: "#1A1916" }}>{csvRowCount} rows</strong>. Pick the one that
           fits what you have.
         </p>
+        <HelpfulTip style={{ marginTop: 16, textAlign: "left" }}>
+          If you need something quickly, start with a template. If you already have artwork from Canva, a school brand kit, or an event flyer, upload your own design.
+        </HelpfulTip>
       </div>
 
       <div
@@ -681,7 +1294,7 @@ export function BatchPdfClient() {
             <h3 style={{ fontSize: 19, fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>Upload my own design</h3>
           </div>
           <p style={{ fontSize: 14, color: "#6E6A61", lineHeight: 1.5, margin: "10px 0 16px" }}>
-            Use your own PDF, PNG, or JPEG and place CSV fields on top of it exactly where you want them.
+            Use your own PNG or JPEG image and place CSV fields on top of it exactly where you want them.
           </p>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: "#1A1916" }}>
             Upload a design <span>→</span>
@@ -705,6 +1318,9 @@ export function BatchPdfClient() {
           <div style={STEP_LABEL_STYLE}>Step 3 · Set up design</div>
           <h2 style={H2}>Pick a starter template</h2>
           <p style={SUBTEXT}>Each template already has its fields laid out. You&apos;ll connect them to your CSV columns next.</p>
+          <HelpfulTip style={{ marginBottom: 16 }}>
+            Pick the closest template, not the perfect one. You will preview real rows before anything is generated.
+          </HelpfulTip>
           <div data-rcol4 style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {allTemplates.map((t) => {
               const sel = t.id === session.selectedTemplateId;
@@ -751,6 +1367,9 @@ export function BatchPdfClient() {
           ) : (
             <div style={{ fontSize: 13, color: "#9A9486", lineHeight: 1.5 }}>Select a template to see its details and continue.</div>
           )}
+          <HelpfulTip style={{ marginTop: 14 }}>
+            Short names like Name, Award, Date, and Role make the next step easier to check.
+          </HelpfulTip>
           <button
             type="button"
             disabled={!selectedTemplate}
@@ -775,8 +1394,11 @@ export function BatchPdfClient() {
           <div style={STEP_LABEL_STYLE}>Step 3 · Upload design</div>
           <h2 style={H2}>Upload your design</h2>
           <p style={{ ...SUBTEXT, maxWidth: 520, margin: "0 auto 24px" }}>
-            A single-page PDF, or a PNG/JPEG image. You&apos;ll place your CSV fields on top of it in the next step.
+            Upload a PNG or JPEG image. You&apos;ll place your CSV fields on top of it in the next step.
           </p>
+          <HelpfulTip style={{ maxWidth: 560, margin: "0 auto 20px", textAlign: "left" }}>
+            Designs work best when they already have clear blank spaces for names, dates, roles, or table numbers.
+          </HelpfulTip>
         </div>
 
         <div style={{ display: customDesignReady ? "none" : "block" }}>
@@ -823,13 +1445,15 @@ export function BatchPdfClient() {
                   ["Type", customDesign.asset.kind.toUpperCase()],
                   ["Dimensions", `${Math.round(customDesign.asset.intrinsicWidth)} × ${Math.round(customDesign.asset.intrinsicHeight)} ${customDesign.asset.intrinsicUnit}`],
                   ["Size", formatBytes(customDesign.asset.sizeBytes)],
-                  ...(customDesign.asset.pageCount ? [["Pages", String(customDesign.asset.pageCount)]] : []),
                 ] as [string, string][]).map(([k, v]) => (
                   <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #F4F1E9", fontSize: 12.5 }}>
                     <span style={{ color: "#8A857A" }}>{k}</span>
                     <span style={{ ...MONO, fontWeight: 600 }}>{v}</span>
                   </div>
                 ))}
+                <HelpfulTip style={{ marginTop: 14 }}>
+                  This preview is scaled down to fit the page. The exported PDFs will use your original uploaded image.
+                </HelpfulTip>
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
@@ -863,6 +1487,9 @@ export function BatchPdfClient() {
         <p style={{ ...SUBTEXT, maxWidth: 620 }}>
           We already matched the ones we recognized. Required fields must be connected before you can preview.
         </p>
+        <HelpfulTip style={{ maxWidth: 680, marginBottom: 16 }}>
+          Match by meaning, not exact spelling. A template field called Recipient can use a spreadsheet column called Student Name.
+        </HelpfulTip>
 
         <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 24, alignItems: "start" }}>
           <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 18, padding: "8px 8px" }}>
@@ -915,6 +1542,9 @@ export function BatchPdfClient() {
                 </div>
               ))}
             </div>
+            <HelpfulTip style={{ marginBottom: 12 }}>
+              This sample row is only for checking. All rows in your CSV will use the same mapping.
+            </HelpfulTip>
             <div style={{ background: isMappingValid ? "#EEF8F1" : "#FBEFCB", border: `1px solid ${isMappingValid ? "#CDEBD9" : "#F0DFA8"}`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: isMappingValid ? "#2E8B57" : "#8A6A12" }}>
                 {isMappingValid ? "✓ All required fields mapped" : "Map all required fields"}
@@ -938,13 +1568,16 @@ export function BatchPdfClient() {
 
     return (
       <div>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, marginBottom: 18, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, marginBottom: 12, flexWrap: "wrap" }}>
           <div>
             <div style={STEP_LABEL_STYLE}>Step 4 · Place fields</div>
-            <h2 style={{ ...H2, margin: "8px 0 4px" }}>Place your fields on the design</h2>
-            <p style={{ fontSize: 14.5, color: "#57534A", margin: 0, maxWidth: 560 }}>Drop a CSV column or static text, then drag and resize it into place.</p>
+            <h2 style={{ ...H2, fontSize: 26, margin: "6px 0 3px" }}>Put your spreadsheet text on the design</h2>
+            <p style={{ fontSize: 14, color: "#57534A", margin: 0, maxWidth: 620 }}>Choose a column, add it to the design, then drag the box onto the right blank space.</p>
           </div>
         </div>
+        <HelpfulTip style={{ marginBottom: 14, maxWidth: 760 }}>
+          Start with the most important field, usually the name. Make its box a little wider than the sample text so longer names still fit.
+        </HelpfulTip>
 
         <CustomFieldPlacementEditor
           file={customDesign.file}
@@ -959,7 +1592,7 @@ export function BatchPdfClient() {
 
         <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
           <button type="button" disabled={!isCustomFieldReady} onClick={handleContinueToPreview} style={{ flex: 1, background: isCustomFieldReady ? "#1A1916" : "#E7E2D6", color: isCustomFieldReady ? "#fff" : "#9A9486", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: isCustomFieldReady ? "pointer" : "not-allowed" }}>
-            Check text fit →
+            Check & confirm →
           </button>
           <button type="button" onClick={() => goToStep("setup-design")} style={{ flexShrink: 0, background: "#fff", color: "#1A1916", fontWeight: 700, fontSize: 15, padding: "14px 20px", border: "1.5px solid #DAD3C4", borderRadius: 11, cursor: "pointer" }}>
             ← Back to upload
@@ -980,6 +1613,9 @@ export function BatchPdfClient() {
         <div style={STEP_LABEL_STYLE}>Step 5 · Preview</div>
         <h2 style={H2}>Check a few rows before you export</h2>
         <p style={{ ...SUBTEXT, maxWidth: 620 }}>This is exactly how each PDF will look. Step through rows to spot anything that doesn&apos;t fit.</p>
+        <HelpfulTip style={{ maxWidth: 680, marginBottom: 16 }}>
+          Check the shortest and longest names you can find. Those two rows usually reveal most spacing problems.
+        </HelpfulTip>
 
         <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24, alignItems: "start" }}>
           <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 20, padding: 24, boxShadow: "0 24px 50px -32px rgba(26,25,22,0.3)" }}>
@@ -1009,6 +1645,9 @@ export function BatchPdfClient() {
                 Some cells are empty — check warnings in the mapping step.
               </div>
             )}
+            <HelpfulTip style={{ marginBottom: 12 }}>
+              Empty values are okay if they are intentional. Go back to mapping if something important is missing.
+            </HelpfulTip>
             <button type="button" onClick={handleContinueToExport} style={{ width: "100%", background: "#1A1916", color: "#fff", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: "pointer" }}>
               Generate free ZIP →
             </button>
@@ -1023,32 +1662,131 @@ export function BatchPdfClient() {
 
   const renderStep5b = () => {
     const { customDesign, csv } = session;
-    if (!customDesign.asset || !csv) return null;
+    if (!customDesign.asset || !customDesign.file || !csv) return null;
 
-    const canExport = isCustomExportReady;
+    const canContinue = isCustomTextFitReady;
     const hasWarnings = preflightStatus === "readyWithWarnings";
+    const selectedSizePresetId = getFinishedSizePresetId(session.customExportOptions);
+    const customSizeSelected = showCustomSizeInputs || selectedSizePresetId === "custom";
+    const recommendedSizePresetId = getFinishedSizePresetId({
+      ...session.customExportOptions,
+      itemSizeMode: "custom",
+      ...getRecommendedFinishedSize(customDesign.asset),
+    });
+    const previewRow = csv.rows[session.previewRowIndex] ?? csv.rows[0] ?? {};
 
-    let sBg = "#F4F1E9", sBorder = "#E7E2D6", sIcon = "…", sTitle = "Checking…", sBody = "Running preflight checks on your field placements.";
-    if (canExport && hasWarnings) { sBg = "#FBEFCB"; sBorder = "#F0DFA8"; sIcon = "⚠"; sTitle = "Ready with warnings"; sBody = "Some values may be adjusted during export. Review the issues below."; }
-    else if (canExport) { sBg = "#EEF8F1"; sBorder = "#CDEBD9"; sIcon = "✓"; sTitle = "Ready to export"; sBody = "Every value fits its field. You're good to go."; }
-    else if (preflightStatus === "blocked") { sBg = "#FBEEEA"; sBorder = "#F2C9BD"; sIcon = "✕"; sTitle = "Issues to fix"; sBody = "Fix the highlighted preflight issues before exporting."; }
-    else if (preflightStatus === "needsOutputSize") { sIcon = "↕"; sTitle = "Set print size"; sBody = "Enter the item print size in export options to continue."; }
-    else if (isPrintSheets && !layoutCanCalculate) { sBg = "#FBEEEA"; sBorder = "#F2C9BD"; sIcon = "✕"; sTitle = "Layout doesn't fit"; sBody = "No item fits on the page with these margins. Reduce margins, gaps, or item size."; }
+    let sBg = "#F4F1E9", sBorder = "#E7E2D6", sIcon = "…", sTitle = "Checking…", sBody = "Checking whether the text fits inside your boxes.";
+    if (canContinue && hasWarnings) { sBg = "#FBEFCB"; sBorder = "#F0DFA8"; sIcon = "!"; sTitle = "Looks okay"; sBody = "Some text may be adjusted, but you can still continue."; }
+    else if (canContinue) { sBg = "#EEF8F1"; sBorder = "#CDEBD9"; sIcon = "✓"; sTitle = "Looks good"; sBody = "The text fits and the finished size is set."; }
+    else if (preflightStatus === "blocked") { sBg = "#FBEEEA"; sBorder = "#F2C9BD"; sIcon = "×"; sTitle = "Fix before export"; sBody = "Some text does not fit yet. Make the field box bigger or adjust the text style."; }
+    else if (preflightStatus === "needsOutputSize") { sIcon = "↕"; sTitle = "Choose a finished size"; sBody = "Pick how big each finished PDF should be."; }
 
     return (
       <div>
-        <div style={STEP_LABEL_STYLE}>Step 5 · Check fit</div>
-        <h2 style={H2}>Will every row fit?</h2>
-        <p style={{ ...SUBTEXT, maxWidth: 640 }}>We check each row&apos;s values against your field boxes so you don&apos;t get clipped text.</p>
+        <div style={STEP_LABEL_STYLE}>Step 5 · Preview</div>
+        <h2 style={H2}>Does this look right?</h2>
+        <p style={{ ...SUBTEXT, maxWidth: 680 }}>Check a row and confirm the finished size so we can catch text that may not fit.</p>
+        <HelpfulTip style={{ maxWidth: 720, marginBottom: 16 }}>
+          The size here is the final printed size, not the image pixel size. Certificates are usually 11 x 8.5 inches; badges and cards are usually smaller.
+        </HelpfulTip>
 
         <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24, alignItems: "start" }}>
           <div style={{ display: "grid", gap: 16 }}>
-            <CustomExportOptionsPanel
-              exportOptions={session.customExportOptions}
-              design={customDesign.asset}
-              csvHeaders={csv.headers}
-              onChange={handleCustomExportOptionsChange}
+            <CustomDesignReviewPreview
+              file={customDesign.file}
+              asset={customDesign.asset}
+              boxes={customDesign.fieldBoxes}
+              row={previewRow}
+              rowIndex={session.previewRowIndex}
+              rowCount={csv.rows.length}
+              onPrevious={handlePreviousRow}
+              onNext={handleNextRow}
             />
+
+            <section style={{ background: "#fff", border: "1px solid #E7E2D6", borderRadius: 18, padding: 18 }}>
+              <div style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#9A9486", textTransform: "uppercase", letterSpacing: "0.1em" }}>Finished size</div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, margin: "5px 0 6px", letterSpacing: "-0.01em" }}>How big should each finished PDF be?</h3>
+              <p style={{ fontSize: 13.5, color: "#6E6A61", lineHeight: 1.5, margin: "0 0 14px" }}>
+                This sets the real print size. The certificate template is usually letter size.
+              </p>
+              <HelpfulTip style={{ marginBottom: 14 }}>
+                If you are unsure, choose the size of the paper or card you plan to hand out.
+              </HelpfulTip>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+                {FINISHED_SIZE_PRESETS.map((preset) => {
+                  const selected = preset.id === "custom"
+                    ? customSizeSelected
+                    : !customSizeSelected && selectedSizePresetId === preset.id;
+                  const recommended = preset.id === recommendedSizePresetId;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleFinishedSizePresetChange(preset)}
+                      style={{
+                        textAlign: "left",
+                        border: `1.5px solid ${selected ? "#F2B01E" : "#E7E2D6"}`,
+                        background: selected ? "#FFFAEB" : "#FFFFFF",
+                        borderRadius: 12,
+                        padding: 13,
+                        cursor: "pointer",
+                        boxShadow: selected ? "0 8px 18px -14px rgba(242,176,30,0.7)" : "none",
+                      }}
+                    >
+                      <span style={{ display: "block", fontSize: 14, fontWeight: 800, color: "#1A1916" }}>{preset.label}</span>
+                      <span style={{ display: "block", fontSize: 12.5, color: "#6E6A61", marginTop: 4 }}>{preset.hint}</span>
+                      {recommended ? (
+                        <span style={{ display: "inline-block", marginTop: 8, ...MONO, fontSize: 10, fontWeight: 700, color: "#8A6A12", background: "#FBEFCB", borderRadius: 5, padding: "3px 6px" }}>
+                          Recommended
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {customSizeSelected ? (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
+                  <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 700, color: "#6E6A61" }}>
+                    Width (in)
+                    <input
+                      type="number"
+                      min={0.5}
+                      step={0.125}
+                      value={session.customExportOptions.customItemWidth ?? ""}
+                      onChange={(event) =>
+                        handleCustomExportOptionsChange({
+                          ...session.customExportOptions,
+                          itemSizeMode: "custom",
+                          unit: "in",
+                          customItemWidth: event.target.value ? Number.parseFloat(event.target.value) : undefined,
+                        })
+                      }
+                      style={{ border: "1px solid #DAD3C4", borderRadius: 9, padding: "10px 11px", fontSize: 14 }}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 700, color: "#6E6A61" }}>
+                    Height (in)
+                    <input
+                      type="number"
+                      min={0.5}
+                      step={0.125}
+                      value={session.customExportOptions.customItemHeight ?? ""}
+                      onChange={(event) =>
+                        handleCustomExportOptionsChange({
+                          ...session.customExportOptions,
+                          itemSizeMode: "custom",
+                          unit: "in",
+                          customItemHeight: event.target.value ? Number.parseFloat(event.target.value) : undefined,
+                        })
+                      }
+                      style={{ border: "1px solid #DAD3C4", borderRadius: 9, padding: "10px 11px", fontSize: 14 }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </section>
+
             <CustomPreflightPanel
               key={`${customDesign.asset.fileName}-${customDesign.asset.sizeBytes}`}
               design={customDesign.asset}
@@ -1068,13 +1806,16 @@ export function BatchPdfClient() {
               </div>
               <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "12px 0 0", color: "#4A463E" }}>{sBody}</p>
             </div>
+            <HelpfulTip style={{ marginBottom: 12 }}>
+              Use the row arrows to test a few real people before continuing.
+            </HelpfulTip>
             <button
               type="button"
-              disabled={!canExport}
+              disabled={!canContinue}
               onClick={handleContinueToExport}
-              style={{ width: "100%", background: canExport ? (hasWarnings ? "#F2B01E" : "#1A1916") : "#E7E2D6", color: canExport ? (hasWarnings ? "#1A1916" : "#fff") : "#9A9486", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: canExport ? "pointer" : "not-allowed", boxShadow: canExport && hasWarnings ? "0 2px 0 #C98F11" : "none" }}
+              style={{ width: "100%", background: canContinue ? (hasWarnings ? "#F2B01E" : "#1A1916") : "#E7E2D6", color: canContinue ? (hasWarnings ? "#1A1916" : "#fff") : "#9A9486", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: canContinue ? "pointer" : "not-allowed", boxShadow: canContinue && hasWarnings ? "0 2px 0 #C98F11" : "none" }}
             >
-              {hasWarnings ? "Export anyway →" : "Continue to export →"}
+              {hasWarnings ? "Continue with warnings →" : "Continue to export setup →"}
             </button>
             <button type="button" onClick={() => goToStep("mapping")} style={{ width: "100%", marginTop: 10, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
               ← Back to placing fields
@@ -1085,10 +1826,91 @@ export function BatchPdfClient() {
     );
   };
 
+  const renderCustomExportOptionsStep = () => {
+    const { customDesign, csv } = session;
+    if (!customDesign.asset || !csv) return null;
+
+    const hasWarnings = preflightStatus === "readyWithWarnings";
+    const canExport = isCustomExportReady;
+    const statusBg = canExport ? "#EEF8F1" : "#FBEEEA";
+    const statusBorder = canExport ? "#CDEBD9" : "#F2C9BD";
+    const statusIcon = canExport ? "✓" : "×";
+    const statusTitle = canExport ? "Ready to generate" : "Adjust export setup";
+    let statusBody = "Choose how the final PDFs should be arranged.";
+
+    if (canExport && hasWarnings) {
+      statusBody = "Text fit has warnings, but this export setup is valid.";
+    } else if (canExport) {
+      statusBody = "The text fit check passed and this export setup is valid.";
+    } else if (preflightStatus !== "ready" && preflightStatus !== "readyWithWarnings") {
+      statusBody = "Go back to preview and finish the text-fit check before exporting.";
+    } else if (isPrintSheets && !layoutCanCalculate) {
+      statusBody = "The page preview cannot fit any finished items yet. Try a larger page, smaller margins, or smaller gaps.";
+    }
+
+    return (
+      <div>
+        <div style={STEP_LABEL_STYLE}>Step 6 · Export setup</div>
+        <h2 style={H2}>How should the final pages look?</h2>
+        <p style={{ ...SUBTEXT, maxWidth: 680 }}>
+          Pick one PDF per row, or place multiple finished designs on each page for printing and cutting.
+        </p>
+        <HelpfulTip style={{ maxWidth: 720, marginBottom: 16 }}>
+          Use one PDF per row for certificates. Use multiple per page for badges, tickets, labels, and anything you will cut after printing.
+        </HelpfulTip>
+
+        <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, alignItems: "start" }}>
+          <div style={{ display: "grid", gap: 16 }}>
+            <CustomExportLayoutPreview
+              exportOptions={session.customExportOptions}
+              design={customDesign.asset}
+              rowCount={csvRowCount}
+              freeRows={freeRows}
+              sheetLayoutInfo={sheetLayoutInfo}
+            />
+
+            <CustomExportOptionsPanel
+              exportOptions={session.customExportOptions}
+              design={customDesign.asset}
+              csvHeaders={csv.headers}
+              onChange={handleCustomExportOptionsChange}
+              showItemSizeControls={false}
+            />
+          </div>
+
+          <aside data-raside style={{ position: "sticky", top: 130 }}>
+            <div style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 32, height: 32, borderRadius: 9, background: "#fff", border: `1px solid ${statusBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{statusIcon}</span>
+                <span style={{ fontSize: 16, fontWeight: 800 }}>{statusTitle}</span>
+              </div>
+              <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "12px 0 0", color: "#4A463E" }}>{statusBody}</p>
+            </div>
+            <HelpfulTip style={{ marginBottom: 12 }}>
+              The outline preview is a quick check for spacing. It does not need to render every name to show whether the sheet layout fits.
+            </HelpfulTip>
+
+            <button
+              type="button"
+              disabled={!canExport}
+              onClick={handleContinueToFinalExport}
+              style={{ width: "100%", background: canExport ? "#1A1916" : "#E7E2D6", color: canExport ? "#fff" : "#9A9486", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: canExport ? "pointer" : "not-allowed" }}
+            >
+              Continue to generate →
+            </button>
+            <button type="button" onClick={() => goToStep("preview")} style={{ width: "100%", marginTop: 10, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+              ← Back to preview
+            </button>
+          </aside>
+        </div>
+      </div>
+    );
+  };
+
   const renderStep6 = () => {
     const exportStatus = isStarterMode ? starterExportStatus : customExportStatus;
     const exportError = isStarterMode ? starterExportError : customExportError;
-    const overFreeCount = Math.max(0, csvRowCount - BATCH_PDF_LIMITS.freeExportRows);
+    const zipName = isStarterMode ? "batch-pdf-free-export.zip" : "batch-pdf-custom-export.zip";
     const doExport = isStarterMode ? handleStarterExport : handleCustomExport;
     const ptToIn = (pt: number) => `${(pt / 72).toFixed(2)} in`;
     const summary: [string, string][] = isStarterMode
@@ -1110,11 +1932,14 @@ export function BatchPdfClient() {
     return (
       <div style={{ maxWidth: 600, margin: "0 auto" }}>
         <div style={{ textAlign: "center" }}>
-          <div style={STEP_LABEL_STYLE}>Step 6 · Export</div>
+          <div style={STEP_LABEL_STYLE}>{isCustomMode ? "Step 7" : "Step 6"} · Export</div>
           <h2 style={H2}>{isStarterMode ? "Generate your free ZIP" : "Generate your custom ZIP"}</h2>
           <p style={{ ...SUBTEXT, maxWidth: 460, margin: "0 auto 24px" }}>
             We&apos;ll render {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} and pack them into a ZIP you can download.
           </p>
+          <HelpfulTip style={{ maxWidth: 500, margin: "0 auto 18px", textAlign: "left" }}>
+            For a real event, print one test page first before printing the full batch.
+          </HelpfulTip>
         </div>
 
         <div style={{ background: "#fff", border: "1px solid #E7E2D6", borderRadius: 20, padding: 24, boxShadow: "0 24px 50px -34px rgba(26,25,22,0.3)" }}>
@@ -1129,23 +1954,18 @@ export function BatchPdfClient() {
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 16, background: "#FBEFCB", borderRadius: 12, padding: "13px 15px" }}>
                 <span style={{ color: "#8A6A12", fontSize: 15 }}>★</span>
                 <div style={{ fontSize: 13, color: "#7A5E12", lineHeight: 1.5 }}>
-                  The free export generates your first <strong>{BATCH_PDF_LIMITS.freeExportRows} PDFs</strong>.
-                  {overFreeCount > 0 && <> Your remaining {overFreeCount} rows stay queued — full export isn&apos;t available yet.</>}
+                  This batch generates up to <strong>{BATCH_PDF_LIMITS.freeExportRows} PDFs</strong> and packs them into a single ZIP.
                 </div>
               </div>
               <button type="button" onClick={doExport} style={{ width: "100%", marginTop: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 9, background: "#F2B01E", color: "#1A1916", fontWeight: 700, fontSize: 16, padding: 15, border: "none", borderRadius: 12, cursor: "pointer", boxShadow: "0 2px 0 #C98F11, 0 12px 26px -10px rgba(242,176,30,0.6)" }}>
                 {isStarterMode ? "Generate free ZIP ↓" : customButtonLabel}
               </button>
-              <button type="button" onClick={() => goToStep("preview")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>← Back</button>
+              <button type="button" onClick={() => goToStep(isCustomMode ? "export-options" : "preview")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>← Back</button>
             </div>
           )}
 
           {exportStatus === "loading" && (
-            <div style={{ textAlign: "center", padding: "14px 0" }}>
-              <div style={{ width: 46, height: 46, borderRadius: "50%", border: "3px solid #F0DFA8", borderTopColor: "#F2B01E", margin: "0 auto 18px", animation: "vsSpin .8s linear infinite" }} />
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Generating your PDFs…</div>
-              <div style={{ fontSize: 13, color: "#8A857A", marginTop: 5 }}>{freeRows} PDF{freeRows !== 1 ? "s" : ""} in this batch</div>
-            </div>
+            <ExportLoadingAnimation freeRows={freeRows} isPrintSheets={isPrintSheets} />
           )}
 
           {exportStatus === "success" && (
@@ -1153,7 +1973,7 @@ export function BatchPdfClient() {
               <div style={{ width: 56, height: 56, borderRadius: 16, background: "#2E8B57", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 800, marginBottom: 16 }}>✓</div>
               <div style={{ fontSize: 20, fontWeight: 800 }}>Your ZIP is ready</div>
               <div style={{ fontSize: 14, color: "#6E6A61", marginTop: 6 }}>
-                {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} packed into <span style={MONO}>batch.zip</span>
+                {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} packed into <span style={MONO}>{zipName}</span>
               </div>
               <button type="button" onClick={doExport} style={{ width: "100%", marginTop: 20, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 9, background: "#1A1916", color: "#fff", fontWeight: 700, fontSize: 16, padding: 15, border: "none", borderRadius: 12, cursor: "pointer" }}>↓ Download again</button>
               <button type="button" onClick={() => router.push("/")} style={{ width: "100%", marginTop: 8, background: "#fff", border: "1.5px solid #DAD3C4", color: "#1A1916", fontWeight: 700, fontSize: 14, padding: 12, borderRadius: 11, cursor: "pointer" }}>Start a new batch</button>
@@ -1175,11 +1995,28 @@ export function BatchPdfClient() {
 
   // ── Main render ────────────────────────────────────────────────────────────
 
+  const isCustomPlacementStep = Boolean(
+    session.csv && session.step === "mapping" && isCustomMode,
+  );
+  const createShellMaxWidth = isCustomPlacementStep
+    ? "min(1360px, calc(100vw - 40px))"
+    : "min(1180px, calc(100vw - 40px))";
+  const createShellPadding = isCustomPlacementStep
+    ? "clamp(18px, 2.4vh, 26px) clamp(14px, 2vw, 24px) 64px"
+    : "clamp(22px, 3vh, 34px) clamp(18px, 3vw, 32px) 80px";
+
   return (
     <div>
       <UtilityStepper steps={buildSteps()} />
 
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "34px 32px 80px" }} data-rpad>
+      <div
+        style={{
+          maxWidth: createShellMaxWidth,
+          margin: "0 auto",
+          padding: createShellPadding,
+        }}
+        data-rpad
+      >
         {!session.csv && (
           <div style={{ textAlign: "center", padding: "80px 0", color: "#8A857A", fontSize: 15 }}>
             Loading…
@@ -1192,11 +2029,29 @@ export function BatchPdfClient() {
         {session.csv && session.step === "mapping" && isCustomMode && renderStep4b()}
         {session.csv && session.step === "preview" && isStarterMode && renderStep5a()}
         {session.csv && session.step === "preview" && isCustomMode && renderStep5b()}
+        {session.csv && session.step === "export-options" && isCustomMode && renderCustomExportOptionsStep()}
         {session.csv && session.step === "export" && renderStep6()}
       </div>
 
       <style>{`
         @keyframes vsSpin { to { transform: rotate(360deg); } }
+        @keyframes vsExportPage {
+          0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); }
+          50% { transform: translateY(-8px) rotate(var(--r, 0deg)); }
+        }
+        @keyframes vsExportSpark {
+          0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+          50% { transform: scale(0.76) rotate(45deg); opacity: 0.72; }
+        }
+        @keyframes vsExportBar {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 220% 50%; }
+        }
+        .vs-export-page { animation: vsExportPage 1.25s ease-in-out infinite; }
+        .vs-export-page:nth-child(1) { --r: -5deg; }
+        .vs-export-page:nth-child(2) { --r: 0deg; }
+        .vs-export-page:nth-child(3) { --r: 5deg; }
+        .vs-export-spark { animation: vsExportSpark 1.1s ease-in-out infinite; }
         .vs-choice-card:hover { border-color: #F2B01E !important; transform: translateY(-3px); box-shadow: 0 18px 36px -22px rgba(26,25,22,0.3) !important; }
         .vs-tpl-card:hover { border-color: #F2B01E !important; box-shadow: 0 8px 20px -10px rgba(26,25,22,0.15) !important; }
         @media (max-width: 900px) {

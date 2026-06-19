@@ -23,8 +23,7 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!validation.ok) {
     const firstError = validation.errors[0];
-    const status = firstError?.code === "generate_paid_unavailable" ? 501 : 400;
-    return jsonError(firstError?.message ?? "Unable to generate this export.", status);
+    return jsonError(firstError?.message ?? "Unable to generate this export.", 400);
   }
 
   try {

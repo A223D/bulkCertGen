@@ -16,7 +16,7 @@ const generatePdfRequestSchema = z.object({
   templateId: z.string().min(1),
   rows: z.array(csvRowSchema),
   mapping: z.record(z.string(), z.string()),
-  mode: z.enum(["free", "paid"]),
+  mode: z.literal("free"),
 });
 
 export type ValidatedGeneratePdfRequest = {
@@ -58,18 +58,6 @@ export function validateGeneratePdfRequest(
   }
 
   const request: GeneratePdfRequest = parsed.data;
-
-  if (request.mode === "paid") {
-    return {
-      ok: false,
-      errors: [
-        {
-          code: "generate_paid_unavailable",
-          message: "Paid export is not available yet.",
-        },
-      ],
-    };
-  }
 
   const template = getTemplateById(request.templateId);
 

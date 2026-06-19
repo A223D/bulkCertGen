@@ -3,12 +3,15 @@ import { BATCH_PDF_LIMITS } from "../../lib/batch-pdf/limits.ts";
 import { validateGeneratePdfRequest } from "../../lib/batch-pdf/validation.ts";
 
 describe("batch PDF export limits", () => {
-  it("free mode caps export rows at 10", () => {
-    const rows = Array.from({ length: 12 }, (_, index) => ({
-      name: `Person ${index}`,
-      course: "Intro",
-      date: "2026-06-15",
-    }));
+  it("caps export rows at the free row limit", () => {
+    const rows = Array.from(
+      { length: BATCH_PDF_LIMITS.freeExportRows },
+      (_, index) => ({
+        name: `Person ${index}`,
+        course: "Intro",
+        date: "2026-06-15",
+      }),
+    );
     const result = validateGeneratePdfRequest({
       templateId: "classic-certificate",
       rows,

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { CustomDesignStage } from "./CustomDesignStage";
 import { FieldBoxInspector } from "./FieldBoxInspector";
-import { FieldBoxList } from "./FieldBoxList";
 import {
   addFieldBox,
   createDefaultCsvFieldBox,
@@ -164,44 +163,34 @@ export function CustomFieldPlacementEditor({
 
   return (
     <section
-      className="rounded-lg border border-line bg-panel p-4"
+      className="min-w-0"
       aria-labelledby="custom-field-placement-heading"
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Add fields
-          </p>
-          <h2 id="custom-field-placement-heading" className="mt-2 text-xl font-semibold">
-            Place fields on the design
-          </h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Add CSV columns or static text, then drag and resize the boxes. Text fit checking and custom export come next.
-          </p>
-        </div>
-        <span className="w-fit rounded-full border border-line bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          Client state only
-        </span>
-      </div>
+      <h2 id="custom-field-placement-heading" className="sr-only">
+        Put text where it belongs
+      </h2>
 
       {asset ? (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <CustomDesignStage
-            file={file}
-            asset={asset}
-            previewUrl={previewUrl}
-            boxes={boxes}
-            selectedBoxId={selectedBoxId}
-            onSelectBox={onSelectedBoxChange}
-            onUpdateBoxRect={handleUpdateBoxRect}
-          />
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0">
+            <CustomDesignStage
+              file={file}
+              asset={asset}
+              previewUrl={previewUrl}
+              boxes={boxes}
+              selectedBoxId={selectedBoxId}
+              onSelectBox={onSelectedBoxChange}
+              onUpdateBoxRect={handleUpdateBoxRect}
+            />
+          </div>
 
-          <div className="space-y-5">
-            <div className="rounded-lg border border-line bg-muted p-3">
+          <aside className="min-h-0 space-y-3 xl:sticky xl:top-28 xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
+            <div className="rounded-lg border border-line bg-muted p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Add field
+                Add a field
               </p>
-              <div className="mt-3 space-y-3">
+              <label className="mt-3 block space-y-1 text-sm font-medium text-ink">
+                <span>Spreadsheet column</span>
                 <select
                   value={safeSelectedColumn}
                   onChange={(event) => setSelectedColumn(event.target.value)}
@@ -214,92 +203,81 @@ export function CustomFieldPlacementEditor({
                     </option>
                   ))}
                 </select>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAddCsvField}
-                    disabled={!hasCsvHeaders}
-                    className="rounded-lg bg-ink px-3 py-2 text-sm font-medium text-panel hover:bg-accent disabled:cursor-not-allowed disabled:bg-disabled disabled:text-disabled-foreground"
-                  >
-                    Add CSV field
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddStaticText}
-                    className="rounded-lg border border-line px-3 py-2 text-sm font-medium hover:border-accent hover:text-accent"
-                  >
-                    Add static text
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Fields
-              </p>
-              <FieldBoxList
-                boxes={boxes}
-                selectedBoxId={selectedBoxId}
-                onSelect={onSelectedBoxChange}
-              />
-            </div>
-
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Inspector
-              </p>
-              <FieldBoxInspector
-                box={selectedBox}
-                csvHeaders={csvHeaders}
-                onUpdate={handleUpdateBox}
-                onDelete={handleDeleteBox}
-                onDuplicate={handleDuplicateBox}
-              />
-            </div>
-
-            <div className="rounded-lg border border-line bg-panel p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Validation
-              </p>
-              {summaryErrors.length > 0 ? (
-                <div className="mt-3 space-y-2">
-                  {summaryErrors.map((error) => (
-                    <p
-                      key={`${error.code}-${error.fieldKey ?? "general"}`}
-                      role="alert"
-                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-                    >
-                      {error.message}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
-                  Field boxes are valid.
-                </p>
-              )}
-              {!placementReady ? (
-                <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                  Add at least one valid field box before preflight.
-                </p>
-              ) : null}
-            </div>
-
-            <div className="rounded-lg border border-line bg-muted p-3">
-              <p className="text-sm font-semibold text-ink">Text fit check comes next.</p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Custom export remains disabled until preflight and rendering are implemented.
-              </p>
+              </label>
               <button
                 type="button"
-                disabled
-                className="mt-3 cursor-not-allowed rounded-lg bg-disabled px-3 py-2 text-sm font-medium text-disabled-foreground"
+                onClick={handleAddCsvField}
+                disabled={!hasCsvHeaders}
+                className="mt-3 w-full rounded-lg bg-ink px-3 py-2 text-sm font-medium text-panel hover:bg-accent disabled:cursor-not-allowed disabled:bg-disabled disabled:text-disabled-foreground"
               >
-                Continue to preflight
+                Add this field
               </button>
+              <button
+                type="button"
+                onClick={handleAddStaticText}
+                className="mt-2 w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium hover:border-accent hover:text-accent"
+              >
+                Add custom text
+              </button>
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                Tip: add one field, place it, then adjust the style before adding the next one.
+              </p>
             </div>
-          </div>
+
+            {boxes.length > 0 ? (
+              <div className="rounded-lg border border-line bg-panel p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Fields on design
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {boxes.map((box) => {
+                    const selected = box.id === selectedBoxId;
+                    return (
+                      <button
+                        key={box.id}
+                        type="button"
+                        onClick={() => onSelectedBoxChange(box.id)}
+                        className={[
+                          "max-w-full truncate rounded-full border px-3 py-1.5 text-xs font-semibold",
+                          selected
+                            ? "border-accent bg-accent-soft text-ink"
+                            : "border-line bg-muted text-muted-foreground hover:border-accent hover:text-ink",
+                        ].join(" ")}
+                      >
+                        {box.label || (box.source.type === "csvColumn" ? box.source.column : "Custom text")}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <FieldBoxInspector
+              box={selectedBox}
+              csvHeaders={csvHeaders}
+              onUpdate={handleUpdateBox}
+              onDelete={handleDeleteBox}
+              onDuplicate={handleDuplicateBox}
+            />
+
+            {summaryErrors.length > 0 ? (
+              <div className="space-y-2">
+                {summaryErrors.map((error) => (
+                  <p
+                    key={`${error.code}-${error.fieldKey ?? "general"}`}
+                    role="alert"
+                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                  >
+                    {error.message}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                {placementReady ? "Ready to check." : "Add at least one field to continue."}
+              </p>
+            )}
+          </aside>
         </div>
       ) : (
         <div className="mt-5 rounded-lg border border-dashed border-line bg-muted p-6 text-center text-sm text-muted-foreground">

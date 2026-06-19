@@ -7,10 +7,10 @@ import {
 } from "../../lib/batch-pdf/custom/design-file.ts";
 
 describe("custom design file utilities", () => {
-  it("accepts .pdf", () => {
-    expect(getDesignFileKindFromName("design.pdf")).toBe("pdf");
+  it("rejects .pdf", () => {
+    expect(getDesignFileKindFromName("design.pdf")).toBeNull();
     expect(validateDesignFileMetadata({ fileName: "design.pdf", sizeBytes: 1 }).ok).toBe(
-      true,
+      false,
     );
   });
 
@@ -35,15 +35,15 @@ describe("custom design file utilities", () => {
     );
   });
 
-  it("accepts uppercase extensions like .PDF", () => {
-    expect(getDesignFileKindFromName("DESIGN.PDF")).toBe("pdf");
-    expect(validateDesignFileMetadata({ fileName: "DESIGN.PDF", sizeBytes: 1 }).ok).toBe(
+  it("accepts uppercase image extensions", () => {
+    expect(getDesignFileKindFromName("DESIGN.PNG")).toBe("png");
+    expect(validateDesignFileMetadata({ fileName: "DESIGN.PNG", sizeBytes: 1 }).ok).toBe(
       true,
     );
   });
 
-  it("maps application/pdf to pdf", () => {
-    expect(getDesignFileKindFromMimeType("application/pdf")).toBe("pdf");
+  it("does not map application/pdf", () => {
+    expect(getDesignFileKindFromMimeType("application/pdf")).toBeNull();
   });
 
   it("maps image/png to png", () => {
@@ -64,7 +64,7 @@ describe("custom design file utilities", () => {
 
   it("rejects oversized files", () => {
     const result = validateDesignFileMetadata({
-      fileName: "design.pdf",
+      fileName: "design.png",
       sizeBytes: CUSTOM_DESIGN_LIMITS.maxDesignFileSizeBytes + 1,
     });
 
@@ -79,7 +79,7 @@ describe("custom design file utilities", () => {
     const result = validateDesignFileMetadata({
       fileName: "design.png",
       sizeBytes: 1,
-      mimeType: "application/pdf",
+      mimeType: "image/jpeg",
     });
 
     expect(result.ok).toBe(false);

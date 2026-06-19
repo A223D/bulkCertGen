@@ -1,4 +1,3 @@
-import { CUSTOM_DESIGN_LIMITS } from "../limits.ts";
 import type { Result } from "../types.ts";
 import { validateDesignAsset } from "./design-file.ts";
 import type { DesignAsset } from "./types.ts";
@@ -46,48 +45,6 @@ export function createImageDesignAsset(args: {
     intrinsicWidth: dimensions.value.width,
     intrinsicHeight: dimensions.value.height,
     intrinsicUnit: "px",
-    aspectRatio: dimensions.value.width / dimensions.value.height,
-  };
-
-  return validateDesignAsset(asset);
-}
-
-export function createPdfDesignAsset(args: {
-  fileName: string;
-  sizeBytes: number;
-  pageCount: number;
-  selectedPageIndex: number;
-  pageWidthPt: number;
-  pageHeightPt: number;
-}): Result<DesignAsset> {
-  if (
-    !Number.isInteger(args.pageCount) ||
-    args.pageCount < 1 ||
-    args.pageCount > CUSTOM_DESIGN_LIMITS.maxPdfPagesAccepted
-  ) {
-    return safeError(
-      "custom_design_page_count_unsupported",
-      args.pageCount > CUSTOM_DESIGN_LIMITS.maxPdfPagesAccepted
-        ? "For now, upload a one-page PDF design."
-        : "This custom design supports one PDF page for now.",
-    );
-  }
-
-  const dimensions = validateDimensions(args.pageWidthPt, args.pageHeightPt);
-
-  if (!dimensions.ok) {
-    return dimensions;
-  }
-
-  const asset: DesignAsset = {
-    kind: "pdf",
-    fileName: args.fileName,
-    sizeBytes: args.sizeBytes,
-    pageCount: args.pageCount,
-    selectedPageIndex: 0,
-    intrinsicWidth: dimensions.value.width,
-    intrinsicHeight: dimensions.value.height,
-    intrinsicUnit: "pt",
     aspectRatio: dimensions.value.width / dimensions.value.height,
   };
 

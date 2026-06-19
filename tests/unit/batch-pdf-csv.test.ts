@@ -133,15 +133,16 @@ describe("CSV utilities", () => {
     expect(errors[0].code).toBe("csv_too_many_columns");
   });
 
-  it("rejects too many rows", () => {
+  it("truncates to the first N rows and warns instead of rejecting", () => {
     const rows = Array.from(
-      { length: BATCH_PDF_LIMITS.maxRowsParsed + 1 },
+      { length: BATCH_PDF_LIMITS.maxRowsParsed + 5 },
       (_, index) => `Person ${index}`,
     );
 
-    const errors = assertParseError(["name", ...rows].join("\n"));
+    const result = assertParseOk(["name", ...rows].join("\n"));
 
-    expect(errors[0].code).toBe("csv_too_many_rows");
+    expect(result.rowCount).toBe(BATCH_PDF_LIMITS.maxRowsParsed);
+    expect(result.warnings.length).toBeGreaterThan(0);
   });
 
   it("enforces max field length without leaking row contents", () => {

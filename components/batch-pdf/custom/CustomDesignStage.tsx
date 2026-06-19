@@ -10,7 +10,6 @@ import {
   type ResizeHandle,
 } from "@/lib/batch-pdf/custom/editor-geometry";
 import { moveNormalizedRect } from "@/lib/batch-pdf/custom/editor-geometry";
-import { renderPdfPreviewToCanvas } from "@/lib/batch-pdf/custom/pdf-preview.client";
 import type {
   CustomFieldBox,
   DesignAsset,
@@ -54,53 +53,24 @@ export function CustomDesignStage({
   onUpdateBoxRect,
 }: CustomDesignStageProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const suppressNextStageClickRef = useRef(false);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
-  const [pdfPreviewFailedFileName, setPdfPreviewFailedFileName] = useState<string | null>(
-    null,
-  );
   const [imgUrl, setImgUrl] = useState<string | null>(null);
+  const aspectRatio = asset.intrinsicWidth / asset.intrinsicHeight;
+  const stageWidthByViewportHeight = `min(100%, max(320px, calc(${(aspectRatio * 100).toFixed(3)}vh - ${(aspectRatio * 15.5).toFixed(3)}rem)))`;
 
-  // Create a local object URL from file for image kinds so it survives
-  // parent component remounts that revoke the originally-created URL.
+  // Create a local object URL from the file so the preview survives parent
+  // component remounts that revoke the originally-created URL.
   useEffect(() => {
-    if (!file || (asset.kind !== "jpeg" && asset.kind !== "png")) {
+    if (!file) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setImgUrl(null);
       return;
     }
     const url = URL.createObjectURL(file);
     setImgUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [file, asset.kind]);
-
-  useEffect(() => {
-    if (!file || asset.kind !== "pdf" || !canvasRef.current) {
-      return;
-    }
-
-    let cancelled = false;
-
-    renderPdfPreviewToCanvas({ file, canvas: canvasRef.current }).then((result) => {
-      if (cancelled) {
-        return;
-      }
-
-      if (!result.ok) {
-        setPdfPreviewFailedFileName(file.name);
-        return;
-      }
-
-      setPdfPreviewFailedFileName(null);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [asset.kind, file]);
-
-  const pdfPreviewFailed = Boolean(
-    file && pdfPreviewFailedFileName === file.name,
-  );
+  }, [file]);
 
   function getStageRect(): DOMRect | null {
     return stageRef.current?.getBoundingClientRect() ?? null;
@@ -118,6 +88,7 @@ export function CustomDesignStage({
 
     event.preventDefault();
     event.stopPropagation();
+    suppressNextStageClickRef.current = true;
     stageRef.current.setPointerCapture(event.pointerId);
     onSelectBox(boxId);
     setInteraction({
@@ -142,6 +113,7 @@ export function CustomDesignStage({
 
     event.preventDefault();
     event.stopPropagation();
+    suppressNextStageClickRef.current = true;
     stageRef.current.setPointerCapture(event.pointerId);
     onSelectBox(boxId);
     setInteraction({
@@ -221,43 +193,46 @@ export function CustomDesignStage({
     onUpdateBoxRect(boxId, rect);
   }
 
+  function handleStageClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (suppressNextStageClickRef.current) {
+      suppressNextStageClickRef.current = false;
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+
+    if (target.closest("[data-field-box-overlay='true']")) {
+      return;
+    }
+
+    onSelectBox(null);
+  }
+
   return (
-    <div className="rounded-lg border border-line bg-muted p-3">
+    <div className="flex justify-center rounded-lg border border-line bg-muted p-3">
       <div
         ref={stageRef}
-        onClick={() => onSelectBox(null)}
+        onClick={handleStageClick}
         onPointerMove={handlePointerMove}
         onPointerUp={finishInteraction}
         onPointerCancel={finishInteraction}
-        className="relative mx-auto w-full max-w-5xl overflow-hidden rounded bg-panel shadow-sm"
-        style={{ aspectRatio: `${asset.intrinsicWidth} / ${asset.intrinsicHeight}` }}
+        className="relative overflow-hidden rounded bg-panel shadow-sm"
+        style={{
+          aspectRatio: `${asset.intrinsicWidth} / ${asset.intrinsicHeight}`,
+          width: stageWidthByViewportHeight,
+        }}
       >
-        {asset.kind === "png" || asset.kind === "jpeg" ? (
-          imgUrl ? (
-            <img
-              src={imgUrl}
-              alt=""
-              className="absolute inset-0 h-full w-full object-contain"
-              draggable={false}
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
-              Image preview is unavailable. Remove the design and upload it again.
-            </div>
-          )
+        {imgUrl ? (
+          <img
+            src={imgUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full object-contain"
+            draggable={false}
+          />
         ) : (
-          <>
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 h-full w-full bg-panel"
-              aria-label="PDF design placement preview"
-            />
-            {pdfPreviewFailed ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-muted p-6 text-center text-sm text-muted-foreground">
-                PDF preview is unavailable for placement.
-              </div>
-            ) : null}
-          </>
+          <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
+            Image preview is unavailable. Remove the design and upload it again.
+          </div>
         )}
 
         <div className="absolute inset-0">

@@ -15,21 +15,6 @@ import {
 } from "../../lib/batch-pdf/custom/export-options.ts";
 import type { DesignAsset, ExportOptions } from "../../lib/batch-pdf/custom/types.ts";
 
-function makePdfDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
-  return {
-    kind: "pdf",
-    fileName: "design.pdf",
-    sizeBytes: 50000,
-    selectedPageIndex: 0,
-    intrinsicWidth: 612,
-    intrinsicHeight: 792,
-    intrinsicUnit: "pt",
-    aspectRatio: 612 / 792,
-    pageCount: 1,
-    ...overrides,
-  };
-}
-
 function makeImageDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
   return {
     kind: "png",
@@ -229,18 +214,6 @@ describe("applyOrientation", () => {
 });
 
 describe("resolveExportItemSizePoints", () => {
-  it("uses intrinsic PDF dimensions for sameAsDesign (fromDesign)", () => {
-    const result = resolveExportItemSizePoints({
-      exportOptions: makeOptions({ itemSizeMode: "fromDesign" }),
-      designAsset: makePdfDesign(),
-    });
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("expected resolution");
-    expect(result.value.widthPt).toBe(612);
-    expect(result.value.heightPt).toBe(792);
-    expect(result.value.source).toBe("sameAsDesign");
-  });
-
   it("returns needs_output_size for an image without a custom item size", () => {
     const result = resolveExportItemSizePoints({
       exportOptions: makeOptions({ itemSizeMode: "fromDesign" }),
@@ -270,18 +243,6 @@ describe("resolveExportItemSizePoints", () => {
 });
 
 describe("resolveSheetPageSizePoints", () => {
-  it("resolves sameAsDesign to the PDF intrinsic size", () => {
-    const result = resolveSheetPageSizePoints({
-      exportOptions: makeOptions({ pageSize: "sameAsDesign", orientation: "portrait" }),
-      designAsset: makePdfDesign(),
-    });
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error("expected resolution");
-    expect(result.value.widthPt).toBe(612);
-    expect(result.value.heightPt).toBe(792);
-    expect(result.value.source).toBe("sameAsDesign");
-  });
-
   it("returns needs_output_size for an image sameAsDesign without a size", () => {
     const result = resolveSheetPageSizePoints({
       exportOptions: makeOptions({ pageSize: "sameAsDesign", itemSizeMode: "fromDesign" }),
@@ -295,7 +256,7 @@ describe("resolveSheetPageSizePoints", () => {
   it("resolves a common page size", () => {
     const result = resolveSheetPageSizePoints({
       exportOptions: makeOptions({ pageSize: "letter" }),
-      designAsset: makePdfDesign(),
+      designAsset: makeImageDesign(),
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected resolution");
@@ -317,7 +278,7 @@ describe("validateExportOptions with a design asset", () => {
         unit: "in",
       }),
       [],
-      makePdfDesign(),
+      makeImageDesign(),
     );
     expect(result.ok).toBe(true);
   });
@@ -333,7 +294,7 @@ describe("validateExportOptions with a design asset", () => {
         unit: "in",
       }),
       [],
-      makePdfDesign(),
+      makeImageDesign(),
     );
     expect(result.ok).toBe(false);
   });

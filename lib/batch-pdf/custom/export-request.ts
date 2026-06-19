@@ -37,8 +37,8 @@ export function parseCustomExportPayload(
 
   if (mode !== "free") {
     return safeError(
-      "custom_export_paid_unavailable",
-      "Paid full-batch export is not available yet.",
+      "custom_export_invalid_mode",
+      "This export request is invalid. Try again.",
     );
   }
 
@@ -95,8 +95,8 @@ export function validateCustomExportPayload(
 ): Result<CustomDesignExportPayload> {
   if (payload.mode !== "free") {
     return safeError(
-      "custom_export_paid_unavailable",
-      "Paid full-batch export is not available yet.",
+      "custom_export_invalid_mode",
+      "This export request is invalid. Try again.",
     );
   }
 

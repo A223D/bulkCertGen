@@ -55,7 +55,6 @@ export type {
   DesignAsset,
   DesignFileKind,
   ExportOptions,
-  ExportOutputMode,
   FieldSource,
   MeasurementUnit,
   NormalizedRect,

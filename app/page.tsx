@@ -12,13 +12,13 @@ import { HeroCsvCard } from "@/components/batch-pdf/HeroCsvCard";
 import MapDiagram from "./map-diagram";
 
 export const metadata: Metadata = {
-  title: "Batch PDF Generator | Very Simple Batch PDF",
+  title: "Certificates, Badges & Cards from Spreadsheets | Very Simple Batch PDF",
   description:
-    "Bring a design with blank spaces, upload a CSV, and map your columns to the blanks. Preview the results, then export a ZIP of finished PDFs.",
+    "For teachers, event organizers, clubs, and busy teams: turn an Excel or Google Sheet plus a template into professional certificates, badges, cards, labels, and PDFs.",
   openGraph: {
-    title: "Batch PDF Generator | Very Simple Batch PDF",
+    title: "Certificates, Badges & Cards from Spreadsheets | Very Simple Batch PDF",
     description:
-      "Turn one design into hundreds of personalized PDFs. No design tools to learn.",
+      "Turn one spreadsheet and one design into hundreds of polished personalized PDFs. No mail merge or design software required.",
   },
 };
 
@@ -54,46 +54,46 @@ const navLinks = [
   { href: "#how", label: "How it works" },
   { href: "#uses", label: "Use cases" },
   { href: "#mapping", label: "Mapping" },
-  { href: "#export", label: "Pricing" },
+  { href: "#export", label: "Export" },
   { href: "#faq", label: "FAQ" },
 ];
 
 const footerNavLinks = [
   { href: "#how", label: "How it works" },
   { href: "#uses", label: "Use cases" },
-  { href: "#export", label: "Pricing" },
+  { href: "#export", label: "Export" },
   { href: "#faq", label: "FAQ" },
 ];
 
 const heroChecks = [
-  `${BATCH_PDF_LIMITS.freeExportRows} PDFs free`,
-  "No account to start",
-  "Files not stored",
+  "Made for teachers, event teams, clubs, and coordinators",
+  `Up to ${BATCH_PDF_LIMITS.freeExportRows} PDFs per batch`,
+  "No mail merge or account required",
 ];
 
 export const homepageSteps: Step[] = [
   {
-    title: "Bring your design",
-    eyebrow: ".png · .jpg · .pdf",
+    title: "Export your spreadsheet",
+    eyebrow: "Excel · Sheets",
     description:
-      "Upload a PNG, JPG, or PDF with blank spaces — or start from a simple template inside the tool.",
+      "Save your Excel or Google Sheet as a CSV. Each row is one student, guest, attendee, member, or label.",
   },
   {
-    title: "Upload your CSV",
-    eyebrow: ".csv",
+    title: "Choose a template",
+    eyebrow: "design",
     description:
-      "Each row becomes one PDF. We detect your columns automatically and show a quick preview.",
+      "Use a starter template or upload a PNG/JPG design with blank spaces for names, dates, roles, or numbers.",
   },
   {
-    title: "Map columns to blanks",
-    eyebrow: "drag → drop",
+    title: "Match columns to spaces",
+    eyebrow: "simple match",
     description:
-      "Drag a column onto each blank space on your design. Name → name area, date → date area.",
+      "Connect each spreadsheet column to the right spot. Name goes in the name box, date goes in the date box.",
   },
   {
-    title: "Download finished PDFs",
+    title: "Preview and export",
     eyebrow: "batch.zip",
-    description: "Preview, then export everything as a single ZIP. One click, every PDF.",
+    description: "Check real rows, catch long text, then download professional PDFs in one ZIP.",
     dark: true,
   },
 ];
@@ -111,33 +111,18 @@ export const homepageUseCases: UseCase[] = [
 
 export const homepagePricingPlans: PricingPlan[] = [
   {
-    name: "Free",
+    name: "What you get",
     badge: "available now",
     headline: `Up to ${BATCH_PDF_LIMITS.freeExportRows} PDFs`,
     description:
-      "Per batch, generated and exported as a ZIP. Plenty to try it on a real list.",
+      "Per batch, generated and exported as a single ZIP. Built for practical school, club, event, and office work.",
     features: [
-      "Bring your own design",
-      "Map columns to blanks",
-      "Preview & overflow checks",
-      "Download as ZIP",
+      "Use a starter template or your own PNG/JPG",
+      "Connect spreadsheet columns to fields",
+      "Preview names before export",
+      "Download polished PDFs as a ZIP",
     ],
     cta: "Create PDFs",
-  },
-  {
-    name: "Full batch",
-    badge: "coming next",
-    headline: "Every row",
-    description:
-      "Export an entire spreadsheet — hundreds or thousands of personalized PDFs in one batch.",
-    features: [
-      "Unlimited rows per batch",
-      "Bulk overflow handling",
-      "Saved designs & mappings",
-      "In active development",
-    ],
-    cta: "Notify me",
-    dark: true,
   },
 ];
 
@@ -153,9 +138,9 @@ export const homepageFaqs: Faq[] = [
       "Yes. Upload a design that already has blank spaces where the personalized details should go, then map your CSV columns onto those blanks. Uploading your own designs is the intended direction of the product.",
   },
   {
-    question: "Can I use a PDF, PNG, or JPEG design?",
+    question: "Can I use a PNG or JPEG design?",
     answer:
-      "PNG and JPG backgrounds work today, and PDF designs are on the roadmap. Whatever you bring, you map your spreadsheet columns to the blank areas on top of it.",
+      "Yes. PNG and JPG backgrounds work today. Upload an image with blank areas, then map your spreadsheet columns on top of it.",
   },
   {
     question: "What happens if text is too long?",
@@ -163,8 +148,8 @@ export const homepageFaqs: Faq[] = [
       "We preview each row first and flag any value that may not fit its space. You decide how to handle overflow: shrink the text slightly, wrap it, truncate it, or flag the row for review — nothing is silently clipped.",
   },
   {
-    question: "How many PDFs can I generate for free?",
-    answer: `You can generate up to ${BATCH_PDF_LIMITS.freeExportRows} PDFs per batch for free and download them as a ZIP. Full-batch export for entire spreadsheets is the next feature we're shipping.`,
+    question: "How many PDFs can I generate?",
+    answer: `You can generate up to ${BATCH_PDF_LIMITS.freeExportRows} PDFs per batch and download them as a single ZIP. If your spreadsheet has more rows than that, the first ${BATCH_PDF_LIMITS.freeExportRows} are processed.`,
   },
   {
     question: "Do you store my files?",
@@ -248,7 +233,7 @@ function PrimaryButton({
 }) {
   return (
     <Link
-      href="/create"
+      href="#vs-start"
       className={`inline-flex min-h-12 items-center justify-center gap-[9px] rounded-xl bg-[#f2b01e] px-[26px] py-[15px] text-[16px] font-bold text-[#1a1916] shadow-[0_2px_0_#c98f11,0_10px_24px_-8px_rgba(242,176,30,0.55)] transition hover:-translate-y-0.5 hover:bg-[#f7c642] ${className}`}
     >
       {children}
@@ -422,6 +407,74 @@ function StepCard({ step, index }: { step: Step; index: number }) {
         {step.description}
       </p>
     </article>
+  );
+}
+
+function SpreadsheetChecklist() {
+  const checklist = [
+    {
+      title: "Make one clean sheet",
+      body: "Put one person, guest, student, member, or item on each row. Use simple column names like Name, Award, Date, Role, Table, or ID.",
+    },
+    {
+      title: "Save it as CSV",
+      body: "In Excel or Google Sheets, use Download or Save As and choose CSV. You do not need formulas, scripts, or mail merge.",
+    },
+    {
+      title: "Choose your design",
+      body: "Use a built-in certificate, badge, card, or label template, or upload a PNG/JPG from Canva, PowerPoint, Google Slides, or your school brand kit.",
+    },
+    {
+      title: "Place the fields",
+      body: "Tell the app where Name, Date, Role, Table Number, or any other column should appear on the design.",
+    },
+    {
+      title: "Preview real rows",
+      body: "Check short and long names before exporting. The app flags text that may not fit, so surprises are easier to catch.",
+    },
+    {
+      title: "Download professional PDFs",
+      body: "Export individual certificates, ID cards, badges, labels, appointment cards, or print sheets in one ZIP.",
+    },
+  ];
+
+  return (
+    <section style={{ padding: "56px 0 36px" }}>
+      <div className="mx-auto max-w-[1440px] px-8">
+        <div className="grid gap-10 rounded-[28px] border border-[#e7e2d6] bg-white p-6 shadow-[0_1px_0_rgba(26,25,22,0.02)] sm:p-12 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
+          <div className="lg:sticky lg:top-24">
+            <SectionKicker>Spreadsheet to finished PDFs</SectionKicker>
+            <h2 className="mt-[14px] max-w-lg text-[42px] font-extrabold leading-[1.07] tracking-[-0.03em]">
+              A practical checklist for non-technical teams.
+            </h2>
+            <p className="mt-[14px] max-w-[440px] text-[17px] leading-[1.6] text-[#57534a]">
+              Perfect for teachers making awards, event organizers printing badges,
+              student clubs preparing passes, and office teams producing cards or labels.
+            </p>
+            <div className="mt-6 rounded-[16px] bg-[#fffaeb] p-4 text-[14px] leading-[1.55] text-[#6e5410]">
+              You only need two things: a spreadsheet and a design with blank spaces.
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            {checklist.map((item, index) => (
+              <div
+                key={item.title}
+                className="grid gap-3 rounded-[16px] border border-[#efeadf] bg-[#fcfbf7] p-4 sm:grid-cols-[44px_1fr]"
+              >
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#1a1916] font-mono text-[14px] font-bold text-[#f2b01e]">
+                  {index + 1}
+                </span>
+                <div>
+                  <h3 className="text-[16px] font-extrabold text-[#1a1916]">{item.title}</h3>
+                  <p className="mt-1 text-[14px] leading-[1.55] text-[#6e6a61]">{item.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -721,12 +774,12 @@ function PricingSection() {
             Download everything as a ZIP.
           </h2>
           <p className="mt-3 text-[17.5px] leading-[1.55] text-[#57534a]">
-            Generate your PDFs and download them in one bundle. Start free — full-batch
-            export is coming next.
+            Generate your PDFs and download them in one bundle — up to{" "}
+            {BATCH_PDF_LIMITS.freeExportRows} per batch.
           </p>
         </div>
 
-        <div className="mx-auto grid max-w-[880px] gap-[22px] md:grid-cols-2">
+        <div className="mx-auto grid max-w-[460px] gap-[22px]">
           {homepagePricingPlans.map((plan) => (
             <article
               key={plan.name}
@@ -800,7 +853,7 @@ function PricingSection() {
                 ))}
               </div>
               <Link
-                href="/create"
+                href="#vs-start"
                 className={`mt-[26px] block rounded-[12px] py-[14px] text-center text-[15.5px] font-bold no-underline transition hover:-translate-y-0.5 ${
                   plan.dark
                     ? "border border-[#3a352d] bg-[#2a2723] text-white"
@@ -814,8 +867,7 @@ function PricingSection() {
         </div>
 
         <p className="mt-[22px] text-center font-mono text-[13px] text-[#9a9486]">
-          We don&apos;t overstate what isn&apos;t built yet. Free export is live today; full-batch
-          export is the next thing we&apos;re shipping.
+          Bring a design and a spreadsheet, map the fields, and download your ZIP.
         </p>
       </div>
     </section>
@@ -906,7 +958,7 @@ export default function HomePage() {
               </a>
             ))}
             <Link
-              href="/create"
+              href="#vs-start"
               className="ml-2 rounded-[10px] bg-[#1a1916] px-[18px] py-[10px] font-bold text-white no-underline hover:bg-[#3a372f]"
             >
               Create PDFs
@@ -923,24 +975,24 @@ export default function HomePage() {
               <span className="rounded-[6px] bg-[#fbefcb] px-[7px] py-[3px] font-mono text-[11px] font-bold text-[#8a6a12]">
                 .csv → .pdf
               </span>
-              Batch-personalization utility
+              For teachers, organizers, clubs, and busy teams
             </div>
             <h1 className="mt-[22px] max-w-3xl text-[60px] font-extrabold leading-[1.02] tracking-[-0.035em]">
-              Turn one design into{" "}
+              Make certificates, badges, and cards from{" "}
               <span className="relative whitespace-nowrap">
-                hundreds
+                a spreadsheet
                 <span
                   className="absolute inset-x-0 -z-10 h-[13px] rounded-[3px] bg-[#f7ce5e]"
                   style={{ bottom: 6 }}
                   aria-hidden="true"
                 />
               </span>{" "}
-              of personalized PDFs
+              without mail merge
             </h1>
             <p className="mt-[22px] max-w-[520px] text-[18.5px] leading-[1.55] text-[#57534a]">
-              Bring a design with blank spaces, upload a CSV, and map your columns to the
-              blanks. Preview the results, then export a ZIP of finished PDFs. No design
-              tools to learn.
+              Start with an Excel or Google Sheet, choose a certificate, badge, card, or
+              label template, preview real rows, and download polished PDFs in one ZIP.
+              No formulas, design software, or technical setup.
             </p>
             <div className="mt-[30px] flex flex-wrap gap-3">
               <PrimaryButton>Create PDFs</PrimaryButton>
@@ -980,11 +1032,10 @@ export default function HomePage() {
           <div className="mx-auto mb-11 max-w-[640px] text-center">
             <SectionKicker>How it works</SectionKicker>
             <h2 className="mt-[14px] text-[44px] font-extrabold leading-[1.06] tracking-[-0.03em]">
-              Four steps. One ZIP of finished PDFs.
+              From spreadsheet to finished PDFs.
             </h2>
             <p className="mt-3 text-[17.5px] leading-[1.55] text-[#57534a]">
-              From a design and a spreadsheet to a folder of personalized files — without
-              touching a design editor.
+              A guided flow for people who need the output, not another complicated design tool.
             </p>
           </div>
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -995,18 +1046,20 @@ export default function HomePage() {
         </div>
       </section>
 
+      <SpreadsheetChecklist />
+
       <section id="uses" style={{ padding: "56px 0 36px" }}>
         <div className="mx-auto max-w-[1440px] px-8">
           <div className="mb-9 flex flex-wrap items-end justify-between gap-6">
             <div className="max-w-[560px]">
               <SectionKicker>What people make</SectionKicker>
               <h2 className="mt-[14px] text-[44px] font-extrabold leading-[1.06] tracking-[-0.03em]">
-                One design. Many personalized PDFs.
+                School, event, and club paperwork that looks polished.
               </h2>
             </div>
             <p className="max-w-[340px] text-[16px] leading-[1.55] text-[#6e6a61]">
-              If it&apos;s the same layout with different names, dates, or numbers — this fills
-              the blanks for every row.
+              If the layout repeats with different names, dates, groups, roles, or numbers,
+              this fills the blanks for every row.
             </p>
           </div>
           <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
@@ -1075,27 +1128,27 @@ export default function HomePage() {
             />
             <div className="relative">
               <div className="inline-flex items-center gap-2 rounded-full bg-[#2a2723] px-[14px] py-[7px] font-mono text-[12px] font-semibold text-[#f2b01e]">
-                design + spreadsheet → ZIP of PDFs
+                Excel or Google Sheets + template → ZIP of PDFs
               </div>
               <h2 className="mx-auto mt-[22px] max-w-[680px] text-[52px] font-extrabold leading-[1.05] tracking-[-0.035em] text-[#fcfbf7]">
-                Have a design and a spreadsheet? Generate the PDFs.
+                Have a roster and a template? Generate the certificates, badges, or cards.
               </h2>
               <p className="mx-auto mt-4 max-w-[480px] text-[18px] leading-[1.55] text-[#b7b1a4]">
-                Fill the blanks from your spreadsheet, preview the results, and download
-                everything as a ZIP.
+                Upload the sheet, match the columns, preview the results, and download
+                professional PDFs as a ZIP.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-[13px]">
                 <PrimaryButton>Create PDFs</PrimaryButton>
                 <a
-                  href="#how"
+                  href="#vs-start"
                   className="inline-flex min-h-12 items-center justify-center gap-[9px] rounded-[13px] border border-[#3a352d] bg-[#2a2723] px-[26px] py-[16px] text-[17px] font-bold text-white no-underline transition hover:-translate-y-0.5"
                 >
                   Try sample CSV
                 </a>
               </div>
               <p className="mt-6 font-mono text-[13.5px] text-[#7a756a]">
-                {BATCH_PDF_LIMITS.freeExportRows} PDFs free · no account to start · files
-                not stored
+                Up to {BATCH_PDF_LIMITS.freeExportRows} PDFs per batch · no account to start ·
+                files not stored
               </p>
             </div>
           </div>

@@ -56,10 +56,10 @@ export function CustomPreflightPanel({
     return (
       <section className="rounded-lg border border-line bg-panel p-4">
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Preflight
+          Text fit
         </p>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Upload a CSV with rows to run preflight checks.
+          Upload a CSV with rows to check whether text fits.
         </p>
       </section>
     );
@@ -71,7 +71,7 @@ export function CustomPreflightPanel({
   return (
     <section className="space-y-4 rounded-lg border border-line bg-panel p-4">
       <p className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-        Preflight
+        Text fit
       </p>
 
       <PreflightSummary result={preflightResult} />

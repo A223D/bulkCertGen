@@ -57,22 +57,12 @@ export function resolveDesignItemSizeForPreflight(args: {
 }): Result<{
   widthPt: number;
   heightPt: number;
-  source: "pdfIntrinsic" | "customItemSize" | "pageSizeFallback";
+  source: "customItemSize" | "pageSizeFallback";
 }> {
-  const { design, exportOptions } = args;
+  const { exportOptions } = args;
 
-  if (design.intrinsicUnit === "pt") {
-    return {
-      ok: true,
-      value: {
-        widthPt: design.intrinsicWidth,
-        heightPt: design.intrinsicHeight,
-        source: "pdfIntrinsic",
-      },
-    };
-  }
-
-  // PNG/JPEG: need physical output dimensions.
+  // Image designs measure text against the custom item size the compositor will
+  // render into. Without it, preflight cannot resolve a physical box.
   if (
     exportOptions?.itemSizeMode === "custom" &&
     typeof exportOptions.customItemWidth === "number" &&
@@ -90,6 +80,7 @@ export function resolveDesignItemSizeForPreflight(args: {
     };
   }
 
+  // No custom size yet: need physical output dimensions.
   return {
     ok: false,
     errors: [

@@ -1,4 +1,4 @@
-export type DesignFileKind = "pdf" | "png" | "jpeg";
+export type DesignFileKind = "png" | "jpeg";
 
 export type DesignAsset = {
   kind: DesignFileKind;
@@ -8,7 +8,7 @@ export type DesignAsset = {
   selectedPageIndex: number;
   intrinsicWidth: number;
   intrinsicHeight: number;
-  intrinsicUnit: "px" | "pt";
+  intrinsicUnit: "px";
   aspectRatio: number;
 };
 
@@ -51,8 +51,6 @@ export type CustomFieldBox = {
   required: boolean;
 };
 
-export type ExportOutputMode = "individualPdfsZip" | "printSheetsZip";
-
 export type PageSizeKey =
   | "sameAsDesign"
   | "letter"
@@ -68,7 +66,6 @@ export type PageSizeKey =
 export type MeasurementUnit = "in" | "mm";
 
 export type ExportOptions = {
-  outputMode: ExportOutputMode;
   pageSize: PageSizeKey;
   orientation: "portrait" | "landscape";
   layoutMode: "onePerPage" | "fitMultiplePerPage";

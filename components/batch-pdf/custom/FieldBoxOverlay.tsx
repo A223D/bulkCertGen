@@ -24,6 +24,24 @@ function boxLabel(box: CustomFieldBox): string {
   return box.source.type === "csvColumn" ? box.source.column : "Static text";
 }
 
+function cssFontFamily(fontFamily: CustomFieldBox["style"]["fontFamily"]): string {
+  if (fontFamily === "Times") return "Times New Roman, serif";
+  if (fontFamily === "Courier") return "Courier New, monospace";
+  return "Arial, Helvetica, sans-serif";
+}
+
+function horizontalPosition(align: CustomFieldBox["style"]["align"]): string {
+  if (align === "center") return "center";
+  if (align === "right") return "flex-end";
+  return "flex-start";
+}
+
+function verticalPosition(align: CustomFieldBox["style"]["verticalAlign"]): string {
+  if (align === "middle") return "center";
+  if (align === "bottom") return "flex-end";
+  return "flex-start";
+}
+
 export function FieldBoxOverlay({
   box,
   selected,
@@ -36,6 +54,7 @@ export function FieldBoxOverlay({
 
   return (
     <div
+      data-field-box-overlay="true"
       role="button"
       tabIndex={0}
       aria-label={`Field box: ${label}`}
@@ -46,7 +65,7 @@ export function FieldBoxOverlay({
       }}
       onKeyDown={(event) => onKeyDown(box.id, event)}
       className={[
-        "absolute touch-none select-none overflow-hidden rounded border bg-panel/75 text-[11px] font-semibold shadow-sm backdrop-blur-[1px]",
+        "absolute touch-none select-none overflow-hidden rounded border bg-panel/75 shadow-sm backdrop-blur-[1px]",
         selected
           ? "border-accent ring-2 ring-accent"
           : "border-ink/40 hover:border-accent",
@@ -57,9 +76,27 @@ export function FieldBoxOverlay({
         width: `${box.rect.width * 100}%`,
         height: `${box.rect.height * 100}%`,
         color: box.style.color,
+        display: "flex",
+        alignItems: verticalPosition(box.style.verticalAlign),
+        justifyContent: horizontalPosition(box.style.align),
+        textAlign: box.style.align,
+        fontFamily: cssFontFamily(box.style.fontFamily),
+        fontWeight: box.style.fontWeight === "bold" ? 700 : 400,
+        fontSize: `${Math.max(9, Math.min(box.style.fontSize, 28))}px`,
+        lineHeight: box.style.lineHeight,
       }}
     >
-      <span className="block truncate px-2 py-1">{label}</span>
+      <span
+        className="block min-w-0 px-2 py-1"
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: box.style.overflowMode === "wrap" ? "normal" : "nowrap",
+          textTransform: box.style.uppercase ? "uppercase" : "none",
+        }}
+      >
+        {label}
+      </span>
       {(["nw", "ne", "sw", "se"] as const).map((handle) => (
         <div
           key={handle}

@@ -2,9 +2,7 @@
 
 import { useRef } from "react";
 import { CUSTOM_DESIGN_LIMITS } from "@/lib/batch-pdf/limits";
-import {
-  formatFileSize,
-} from "@/lib/batch-pdf/custom/design-asset";
+import { formatFileSize } from "@/lib/batch-pdf/custom/design-asset";
 import { validateDesignFileMetadata } from "@/lib/batch-pdf/custom/design-file";
 import type { BatchPdfError } from "@/lib/batch-pdf/types";
 import type { CustomDesignState } from "@/lib/batch-pdf/custom/design-upload-state";
@@ -66,11 +64,11 @@ export function CustomDesignUpload({
             Upload a design file
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Use a PDF, PNG, JPG, or JPEG file. The design stays in this browser session and is not sent to the server for preview.
+            Use a PNG, JPG, or JPEG image. The design stays in this browser session and is not sent to the server for preview.
           </p>
         </div>
         <div className="rounded-lg border border-line bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">
-          Limit: {formatFileSize(CUSTOM_DESIGN_LIMITS.maxDesignFileSizeBytes)} max, one-page PDFs
+          Limit: {formatFileSize(CUSTOM_DESIGN_LIMITS.maxDesignFileSizeBytes)} max
         </div>
       </div>
 
@@ -85,7 +83,7 @@ export function CustomDesignUpload({
           ref={inputRef}
           id="custom-design-file-upload"
           type="file"
-          accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+          accept=".png,.jpg,.jpeg,image/png,image/jpeg"
           className="sr-only"
           onChange={handleUpload}
           aria-describedby="custom-design-file-help"

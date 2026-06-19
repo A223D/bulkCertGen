@@ -15,7 +15,7 @@ describe("generate PDF request validation", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("rejects paid mode in Phase 5", () => {
+  it("rejects an unsupported mode as an invalid request", () => {
     const result = validateGeneratePdfRequest({
       ...validRequest,
       mode: "paid",
@@ -24,7 +24,7 @@ describe("generate PDF request validation", () => {
     expect(result.ok).toBe(false);
 
     if (!result.ok) {
-      expect(result.errors[0].code).toBe("generate_paid_unavailable");
+      expect(result.errors[0].code).toBe("generate_invalid_request");
     }
   });
 

@@ -238,26 +238,6 @@ async function embedBackgroundDrawer(
   designBytes: Uint8Array,
   designAsset: DesignAsset,
 ): Promise<BackgroundDrawer> {
-  if (designAsset.kind === "pdf") {
-    const designDoc = await PDFDocument.load(designBytes);
-
-    if (designDoc.getPageCount() === 0) {
-      throw new Error("Design PDF has no pages.");
-    }
-
-    const [embeddedPage] = await outputPdf.embedPdf(designDoc, [0]);
-
-    return (page, itemRect) => {
-      const bottomLeftY = page.getHeight() - itemRect.yPt - itemRect.heightPt;
-      page.drawPage(embeddedPage, {
-        x: itemRect.xPt,
-        y: bottomLeftY,
-        width: itemRect.widthPt,
-        height: itemRect.heightPt,
-      });
-    };
-  }
-
   const image =
     designAsset.kind === "png"
       ? await outputPdf.embedPng(designBytes)

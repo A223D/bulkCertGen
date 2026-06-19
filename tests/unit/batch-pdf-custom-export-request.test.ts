@@ -15,21 +15,6 @@ import type { CsvRow } from "../../lib/batch-pdf/types.ts";
 // Test helpers
 // ---------------------------------------------------------------------------
 
-function makePdfDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
-  return {
-    kind: "pdf",
-    fileName: "design.pdf",
-    sizeBytes: 50000,
-    selectedPageIndex: 0,
-    intrinsicWidth: 612,
-    intrinsicHeight: 792,
-    intrinsicUnit: "pt",
-    aspectRatio: 612 / 792,
-    pageCount: 1,
-    ...overrides,
-  };
-}
-
 function makeImageDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
   return {
     kind: "png",
@@ -63,13 +48,21 @@ function makeRow(overrides: CsvRow = {}): CsvRow {
 function makeValidPayload(
   overrides: Partial<CustomDesignExportPayload> = {},
 ): CustomDesignExportPayload {
+  const exportOptions: ExportOptions = {
+    ...createDefaultExportOptions(),
+    itemSizeMode: "custom",
+    customItemWidth: 11,
+    customItemHeight: 8.5,
+    unit: "in",
+  };
+
   return {
     mode: "free",
     rows: [makeRow()],
     csvHeaders: ["name"],
-    designAsset: makePdfDesign(),
+    designAsset: makeImageDesign(),
     fieldBoxes: [makeBox()],
-    exportOptions: createDefaultExportOptions(),
+    exportOptions,
     ...overrides,
   };
 }
@@ -116,11 +109,11 @@ describe("parseCustomExportPayload", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("rejects paid mode at parse stage", () => {
+  it("rejects an unsupported mode at parse stage", () => {
     const result = parseCustomExportPayload({ ...makeValidPayload(), mode: "paid" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errors[0].code).toBe("custom_export_paid_unavailable");
+      expect(result.errors[0].code).toBe("custom_export_invalid_mode");
     }
   });
 
@@ -142,7 +135,7 @@ describe("parseCustomExportPayload", () => {
 // ---------------------------------------------------------------------------
 
 describe("validateCustomExportPayload", () => {
-  it("accepts a valid free PDF payload", () => {
+  it("accepts a valid free image payload", () => {
     const result = validateCustomExportPayload(makeValidPayload());
     expect(result.ok).toBe(true);
   });
@@ -152,13 +145,13 @@ describe("validateCustomExportPayload", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("rejects paid mode", () => {
+  it("rejects an unsupported mode", () => {
     const payload = makeValidPayload();
     // Bypass TypeScript to simulate a bad runtime value.
     const result = validateCustomExportPayload({ ...payload, mode: "paid" as "free" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errors[0].code).toBe("custom_export_paid_unavailable");
+      expect(result.errors[0].code).toBe("custom_export_invalid_mode");
       expect(result.errors[0].message).not.toContain("row");
     }
   });
@@ -183,7 +176,6 @@ describe("validateCustomExportPayload", () => {
     const exportOptions: ExportOptions = {
       ...createDefaultExportOptions(),
       layoutMode: "fitMultiplePerPage",
-      outputMode: "printSheetsZip",
       pageSize: "letter",
       itemSizeMode: "custom",
       customItemWidth: 2,
@@ -198,7 +190,6 @@ describe("validateCustomExportPayload", () => {
     const exportOptions: ExportOptions = {
       ...createDefaultExportOptions(),
       layoutMode: "fitMultiplePerPage",
-      outputMode: "printSheetsZip",
       pageSize: "letter",
       itemSizeMode: "custom",
       customItemWidth: 20,
@@ -211,7 +202,7 @@ describe("validateCustomExportPayload", () => {
 
   it("accepts cropMarks and includeOverflowReport toggles", () => {
     const exportOptions: ExportOptions = {
-      ...createDefaultExportOptions(),
+      ...makeValidPayload().exportOptions,
       cropMarks: true,
       includeOverflowReport: true,
     };
@@ -229,24 +220,19 @@ describe("validateCustomExportPayload", () => {
     }
   });
 
-  it("accepts PDF design with intrinsic dimensions (no item size needed)", () => {
-    const result = validateCustomExportPayload(makeValidPayload());
-    expect(result.ok).toBe(true);
-  });
-
   it("rejects invalid design asset", () => {
     const result = validateCustomExportPayload(
       makeValidPayload({
-        designAsset: makePdfDesign({ pageCount: 5 }),
+        designAsset: makeImageDesign({ intrinsicWidth: 0 }),
       }),
     );
     expect(result.ok).toBe(false);
   });
 
-  it("rejects a design asset that does not match filename (multi-page)", () => {
+  it("rejects a design asset that does not match filename", () => {
     const result = validateCustomExportPayload(
       makeValidPayload({
-        designAsset: makePdfDesign({ pageCount: 3 }),
+        designAsset: makeImageDesign({ kind: "jpeg", fileName: "design.png" }),
       }),
     );
     expect(result.ok).toBe(false);
@@ -295,13 +281,19 @@ describe("getRowsForFreeCustomExport", () => {
   });
 
   it("caps at freeExportRows", () => {
-    const rows = Array.from({ length: 25 }, (_, i) => ({ name: `Person ${i}` }));
+    const rows = Array.from(
+      { length: BATCH_PDF_LIMITS.freeExportRows + 10 },
+      (_, i) => ({ name: `Person ${i}` }),
+    );
     const result = getRowsForFreeCustomExport(rows);
     expect(result).toHaveLength(BATCH_PDF_LIMITS.freeExportRows);
   });
 
   it("returns first N rows in order", () => {
-    const rows = Array.from({ length: 15 }, (_, i) => ({ name: `Row ${i}` }));
+    const rows = Array.from(
+      { length: BATCH_PDF_LIMITS.freeExportRows + 5 },
+      (_, i) => ({ name: `Row ${i}` }),
+    );
     const result = getRowsForFreeCustomExport(rows);
     expect(result[0].name).toBe("Row 0");
     expect(result[result.length - 1].name).toBe(`Row ${BATCH_PDF_LIMITS.freeExportRows - 1}`);

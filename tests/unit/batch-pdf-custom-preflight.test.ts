@@ -13,21 +13,6 @@ import type { CsvRow } from "../../lib/batch-pdf/types.ts";
 // Test helpers
 // ---------------------------------------------------------------------------
 
-function makePdfDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
-  return {
-    kind: "pdf",
-    fileName: "design.pdf",
-    sizeBytes: 50000,
-    selectedPageIndex: 0,
-    intrinsicWidth: 612, // US Letter width in points
-    intrinsicHeight: 792,
-    intrinsicUnit: "pt",
-    aspectRatio: 612 / 792,
-    pageCount: 1,
-    ...overrides,
-  };
-}
-
 function makeImageDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
   return {
     kind: "png",
@@ -38,6 +23,17 @@ function makeImageDesign(overrides: Partial<DesignAsset> = {}): DesignAsset {
     intrinsicHeight: 1000,
     intrinsicUnit: "px",
     aspectRatio: 1,
+    ...overrides,
+  };
+}
+
+function makeImageExportOptions(overrides: Partial<ExportOptions> = {}): ExportOptions {
+  return {
+    ...createDefaultExportOptions(),
+    itemSizeMode: "custom",
+    customItemWidth: 8,
+    customItemHeight: 8,
+    unit: "in",
     ...overrides,
   };
 }
@@ -66,15 +62,6 @@ const CSV_HEADERS = ["name", "company", "role"];
 // ---------------------------------------------------------------------------
 
 describe("resolveDesignItemSizeForPreflight", () => {
-  it("resolves PDF design dimensions directly from intrinsic points", () => {
-    const result = resolveDesignItemSizeForPreflight({ design: makePdfDesign() });
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error();
-    expect(result.value.widthPt).toBe(612);
-    expect(result.value.heightPt).toBe(792);
-    expect(result.value.source).toBe("pdfIntrinsic");
-  });
-
   it("returns needsOutputSize error for image design without custom size", () => {
     const result = resolveDesignItemSizeForPreflight({ design: makeImageDesign() });
     expect(result.ok).toBe(false);
@@ -160,10 +147,10 @@ describe("getFieldBoxTextForRow", () => {
 describe("runCustomDesignPreflight - valid setup", () => {
   it("returns ready when all short values fit", () => {
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "Alice" }), makeRow({ name: "Bob" })],
       fieldBoxes: [makeBox()],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -179,10 +166,10 @@ describe("runCustomDesignPreflight - valid setup", () => {
 
   it("summary fitCount equals cells that fit without blocking", () => {
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "A" }), makeRow({ name: "B" }), makeRow({ name: "C" })],
       fieldBoxes: [makeBox()],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -198,10 +185,10 @@ describe("runCustomDesignPreflight - valid setup", () => {
 describe("runCustomDesignPreflight - missing required value", () => {
   it("creates a blocking error for missing required CSV value", () => {
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "" })],
       fieldBoxes: [makeBox({ required: true })],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -220,10 +207,10 @@ describe("runCustomDesignPreflight - missing required value", () => {
 
   it("does not flag missing optional value", () => {
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "" })],
       fieldBoxes: [makeBox({ required: false })],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -247,10 +234,10 @@ describe("runCustomDesignPreflight - static text", () => {
       required: false,
     });
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow(), makeRow()],
       fieldBoxes: [box],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -270,10 +257,10 @@ describe("runCustomDesignPreflight - same column, multiple boxes", () => {
     const box1 = makeBox({ id: "b1", label: "Name 1" });
     const box2 = makeBox({ id: "b2", label: "Name 2" });
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow()],
       fieldBoxes: [box1, box2],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -305,10 +292,10 @@ describe("runCustomDesignPreflight - overflow modes", () => {
       style: { ...createDefaultTextBoxStyle(), fontSize: 24, minFontSize: 8, overflowMode: "shrinkToFit" },
     });
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "AlexanderHamiltonTheLong" })],
       fieldBoxes: [medBox],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -324,10 +311,10 @@ describe("runCustomDesignPreflight - overflow modes", () => {
 
   it("reports text_overflow error and blocks when shrink fails at min size", () => {
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "W".repeat(80) })],
       fieldBoxes: [tinyBox],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -345,10 +332,10 @@ describe("runCustomDesignPreflight - overflow modes", () => {
       style: { ...createDefaultTextBoxStyle(), overflowMode: "truncate", fontSize: 14 },
     });
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "W".repeat(80) })],
       fieldBoxes: [truncBox],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -366,10 +353,10 @@ describe("runCustomDesignPreflight - overflow modes", () => {
       style: { ...createDefaultTextBoxStyle(), overflowMode: "wrap", fontSize: 14, lineHeight: 1.1 },
     });
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "Hello World Test" })],
       fieldBoxes: [wrapBox],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -386,10 +373,10 @@ describe("runCustomDesignPreflight - overflow modes", () => {
       style: { ...createDefaultTextBoxStyle(), overflowMode: "errorIfOverflow", fontSize: 14 },
     });
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "W".repeat(80) })],
       fieldBoxes: [errBox],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -407,10 +394,10 @@ describe("runCustomDesignPreflight - invalid field boxes", () => {
   it("returns error result for invalid field box collection", () => {
     const invalidBox = makeBox({ label: "" }); // empty label is invalid
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow()],
       fieldBoxes: [invalidBox],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(false);
@@ -418,10 +405,10 @@ describe("runCustomDesignPreflight - invalid field boxes", () => {
 
   it("handles empty field boxes (allowed in setup mode)", () => {
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow()],
       fieldBoxes: [],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     // Empty field boxes pass validateCustomFieldBoxes but checkedCellCount=0
@@ -480,7 +467,7 @@ describe("runCustomDesignPreflight - privacy", () => {
   it("issue objects include row index, field label, source column, value length — not raw value", () => {
     const secretValue = "SUPERSECRET-DATA-XYZ";
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: secretValue })],
       fieldBoxes: [
         makeBox({
@@ -488,7 +475,7 @@ describe("runCustomDesignPreflight - privacy", () => {
           style: { ...createDefaultTextBoxStyle(), overflowMode: "errorIfOverflow", fontSize: 14 },
         }),
       ],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -527,14 +514,14 @@ describe("runCustomDesignPreflight - summary counts", () => {
       source: { type: "csvColumn", column: "company" },
     });
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [
         makeRow({ name: "", company: "ACME" }),
         makeRow({ name: "Bob", company: "Corp" }),
         makeRow({ name: "Carol", company: "Ltd" }),
       ],
       fieldBoxes: [box1, box2],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -549,10 +536,10 @@ describe("runCustomDesignPreflight - summary counts", () => {
 
   it("status is ready when no issues", () => {
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow()],
       fieldBoxes: [makeBox()],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);
@@ -562,10 +549,10 @@ describe("runCustomDesignPreflight - summary counts", () => {
 
   it("status is blocked when errors exist", () => {
     const result = runCustomDesignPreflight({
-      design: makePdfDesign(),
+      design: makeImageDesign(),
       rows: [makeRow({ name: "" })],
       fieldBoxes: [makeBox({ required: true })],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
       csvHeaders: CSV_HEADERS,
     });
     expect(result.ok).toBe(true);

@@ -24,14 +24,14 @@ const SEVERITY_ORDER: Record<PreflightIssue["severity"], number> = {
 };
 
 const GUIDANCE: Record<PreflightIssue["code"], string> = {
-  missing_required_value: "Supply a value for this column or uncheck the Required flag.",
+  missing_required_value: "Add this value to the spreadsheet or make the field optional.",
   text_overflow:
-    "Enlarge the box, reduce the font size, or switch to Shrink to fit, Wrap, or Truncate.",
-  text_truncated: "Acceptable if truncation is intended; enlarge the box to show the full value.",
+    "Make the field box bigger, use a smaller font, or choose a text-fit option.",
+  text_truncated: "This is okay if you meant to shorten long text.",
   text_shrunk: "Text will be scaled down automatically.",
   text_wrapped: "Text will flow onto multiple lines.",
-  invalid_field_box: "Remove or fix the invalid field box.",
-  needs_output_size: "Set a custom item width and height in export options.",
+  invalid_field_box: "Remove or fix this field box.",
+  needs_output_size: "Choose the finished size above.",
 };
 
 export function PreflightIssueList({ issues, hiddenCount }: Props) {
@@ -42,7 +42,7 @@ export function PreflightIssueList({ issues, hiddenCount }: Props) {
   return (
     <div className="space-y-2">
       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        Issues ({issues.length + hiddenCount})
+        Items to check ({issues.length + hiddenCount})
       </p>
       <ul className="space-y-2">
         {sorted.map((issue, index) => (

@@ -5,11 +5,11 @@ type Props = {
 };
 
 const STATUS_MESSAGES: Record<CustomDesignPreflightResult["status"], string> = {
-  ready: "All checked values fit with the current field settings.",
-  readyWithWarnings: "Export would be allowed, but some values will be adjusted.",
-  blocked: "Some values do not fit. Adjust boxes or overflow settings before exporting.",
+  ready: "Text fits.",
+  readyWithWarnings: "Some text may be adjusted, but you can still export.",
+  blocked: "Some text does not fit yet. Fix it before exporting.",
   needsOutputSize:
-    "Set a custom output size in export options so text fit can be checked for this image design.",
+    "Choose the finished size so text fit can be checked.",
 };
 
 const STATUS_COLORS: Record<CustomDesignPreflightResult["status"], string> = {

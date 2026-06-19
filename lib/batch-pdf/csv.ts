@@ -103,20 +103,25 @@ export function parseCsvText(text: string): Result<CsvParseResult> {
     return csvError("csv_duplicate_header", "CSV column headers must be unique.");
   }
 
-  const dataRows = rawRows.slice(1);
+  const allDataRows = rawRows.slice(1);
 
-  if (dataRows.length === 0) {
+  if (allDataRows.length === 0) {
     return csvError(
       "csv_missing_rows",
       "This CSV has headers but no data rows.",
     );
   }
 
-  if (dataRows.length > BATCH_PDF_LIMITS.maxRowsParsed) {
-    return csvError(
-      "csv_too_many_rows",
-      `This CSV has too many rows. Use ${BATCH_PDF_LIMITS.maxRowsParsed} rows or fewer.`,
-    );
+  // Process the first N rows; anything beyond the limit is left out (with a
+  // warning) rather than rejecting the whole file.
+  const warnings: CsvParseResult["warnings"] = [];
+  const dataRows = allDataRows.slice(0, BATCH_PDF_LIMITS.maxRowsParsed);
+
+  if (allDataRows.length > BATCH_PDF_LIMITS.maxRowsParsed) {
+    warnings.push({
+      code: "csv_rows_truncated",
+      message: `This CSV has ${allDataRows.length} rows. Only the first ${BATCH_PDF_LIMITS.maxRowsParsed} will be processed.`,
+    });
   }
 
   const rows: CsvRow[] = [];
@@ -155,7 +160,7 @@ export function parseCsvText(text: string): Result<CsvParseResult> {
       headers,
       rows,
       rowCount: rows.length,
-      warnings: [],
+      warnings,
     },
   };
 }

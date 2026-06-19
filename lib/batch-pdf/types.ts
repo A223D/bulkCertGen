@@ -66,8 +66,7 @@ export type GeneratePdfRequest = {
   templateId: string;
   rows: CsvRow[];
   mapping: FieldMapping;
-  mode: "free" | "paid";
-  paidSessionId?: string;
+  mode: "free";
 };
 
 export type GeneratePdfResult = {

@@ -34,14 +34,6 @@ function b64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-async function makeMinimalPdfBytes(): Promise<Uint8Array> {
-  const doc = await PDFDocument.create();
-  const page = doc.addPage([612, 792]);
-  // A page needs a content stream for pdf-lib to embed it.
-  page.drawRectangle({ x: 0, y: 0, width: 1, height: 1 });
-  return doc.save();
-}
-
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
@@ -76,21 +68,6 @@ function makeCsvBox(column: string, overrides: Partial<CustomFieldBox> = {}): Cu
     rect: { x: 0.1, y: 0.4, width: 0.5, height: 0.2 },
     style: createDefaultTextBoxStyle(),
     required: false,
-    ...overrides,
-  };
-}
-
-function makePdfDesignAsset(overrides: Partial<DesignAsset> = {}): DesignAsset {
-  return {
-    kind: "pdf",
-    fileName: "design.pdf",
-    sizeBytes: 1000,
-    selectedPageIndex: 0,
-    intrinsicWidth: 612,
-    intrinsicHeight: 792,
-    intrinsicUnit: "pt",
-    aspectRatio: 612 / 792,
-    pageCount: 1,
     ...overrides,
   };
 }
@@ -154,31 +131,15 @@ describe("renderCustomDesignPdfForRow", () => {
     expect(bytes.length).toBeGreaterThan(0);
   });
 
-  it("renders one-page PDF design with one static text box to non-empty PDF bytes", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
-
-    const bytes = await renderCustomDesignPdfForRow({
-      designBytes: pdfBytes,
-      designAsset: makePdfDesignAsset(),
-      row: {},
-      fieldBoxes: [makeStaticTextBox()],
-      exportOptions: createDefaultExportOptions(),
-    });
-
-    expect(bytes).toBeInstanceOf(Uint8Array);
-    expect(bytes.length).toBeGreaterThan(0);
-  });
-
   it("renders CSV-column text from row", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
     const row: CsvRow = { name: "Alice Johnson" };
 
     const bytes = await renderCustomDesignPdfForRow({
-      designBytes: pdfBytes,
-      designAsset: makePdfDesignAsset(),
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
       row,
       fieldBoxes: [makeCsvBox("name")],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
     });
 
     // Should produce valid PDF bytes without throwing
@@ -186,7 +147,6 @@ describe("renderCustomDesignPdfForRow", () => {
   });
 
   it("shrinkToFit renders without throwing", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
     const shrinkBox = makeStaticTextBox({
       source: { type: "staticText", value: "This is a very long text string that will not fit" },
       style: { ...createDefaultTextBoxStyle(), overflowMode: "shrinkToFit", fontSize: 36 },
@@ -194,17 +154,16 @@ describe("renderCustomDesignPdfForRow", () => {
 
     await expect(
       renderCustomDesignPdfForRow({
-        designBytes: pdfBytes,
-        designAsset: makePdfDesignAsset(),
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
         row: {},
         fieldBoxes: [shrinkBox],
-        exportOptions: createDefaultExportOptions(),
+        exportOptions: makeImageExportOptions(),
       }),
     ).resolves.toBeInstanceOf(Uint8Array);
   });
 
   it("wrap mode renders without throwing", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
     const wrapBox = makeStaticTextBox({
       source: { type: "staticText", value: "Line one and more words here" },
       style: { ...createDefaultTextBoxStyle(), overflowMode: "wrap" },
@@ -212,17 +171,16 @@ describe("renderCustomDesignPdfForRow", () => {
 
     await expect(
       renderCustomDesignPdfForRow({
-        designBytes: pdfBytes,
-        designAsset: makePdfDesignAsset(),
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
         row: {},
         fieldBoxes: [wrapBox],
-        exportOptions: createDefaultExportOptions(),
+        exportOptions: makeImageExportOptions(),
       }),
     ).resolves.toBeInstanceOf(Uint8Array);
   });
 
   it("truncate mode renders without throwing", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
     const truncateBox = makeStaticTextBox({
       source: { type: "staticText", value: "A very long text that exceeds the available box width easily" },
       style: { ...createDefaultTextBoxStyle(), overflowMode: "truncate", fontSize: 48 },
@@ -230,25 +188,23 @@ describe("renderCustomDesignPdfForRow", () => {
 
     await expect(
       renderCustomDesignPdfForRow({
-        designBytes: pdfBytes,
-        designAsset: makePdfDesignAsset(),
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
         row: {},
         fieldBoxes: [truncateBox],
-        exportOptions: createDefaultExportOptions(),
+        exportOptions: makeImageExportOptions(),
       }),
     ).resolves.toBeInstanceOf(Uint8Array);
   });
 
   it("missing optional value renders blank without throwing", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
-
     await expect(
       renderCustomDesignPdfForRow({
-        designBytes: pdfBytes,
-        designAsset: makePdfDesignAsset(),
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
         row: {},  // no 'name' key
         fieldBoxes: [makeCsvBox("name", { required: false })],
-        exportOptions: createDefaultExportOptions(),
+        exportOptions: makeImageExportOptions(),
       }),
     ).resolves.toBeInstanceOf(Uint8Array);
   });
@@ -257,23 +213,21 @@ describe("renderCustomDesignPdfForRow", () => {
     await expect(
       renderCustomDesignPdfForRow({
         designBytes: new Uint8Array([0x00, 0x01, 0x02]),
-        designAsset: makePdfDesignAsset(),
+        designAsset: makePngDesignAsset(),
         row: {},
         fieldBoxes: [makeStaticTextBox()],
-        exportOptions: createDefaultExportOptions(),
+        exportOptions: makeImageExportOptions(),
       }),
     ).rejects.toThrow();
   });
 
   it("generated PDF bytes can be loaded by pdf-lib", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
-
     const outputBytes = await renderCustomDesignPdfForRow({
-      designBytes: pdfBytes,
-      designAsset: makePdfDesignAsset(),
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
       row: {},
       fieldBoxes: [makeStaticTextBox()],
-      exportOptions: createDefaultExportOptions(),
+      exportOptions: makeImageExportOptions(),
     });
 
     // Verify the output is a valid PDF that pdf-lib can parse.
@@ -281,19 +235,17 @@ describe("renderCustomDesignPdfForRow", () => {
   });
 
   it("renders multiple field boxes on the same page without throwing", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
-
     await expect(
       renderCustomDesignPdfForRow({
-        designBytes: pdfBytes,
-        designAsset: makePdfDesignAsset(),
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
         row: { name: "Alice", title: "Engineer" },
         fieldBoxes: [
           makeCsvBox("name", { id: "b1", rect: { x: 0.1, y: 0.1, width: 0.5, height: 0.1 } }),
           makeCsvBox("title", { id: "b2", rect: { x: 0.1, y: 0.3, width: 0.5, height: 0.1 } }),
           makeStaticTextBox({ id: "b3", rect: { x: 0.1, y: 0.5, width: 0.5, height: 0.1 } }),
         ],
-        exportOptions: createDefaultExportOptions(),
+        exportOptions: makeImageExportOptions(),
       }),
     ).resolves.toBeInstanceOf(Uint8Array);
   });
@@ -307,7 +259,6 @@ function makeSheetOptions(overrides: Partial<ExportOptions> = {}): ExportOptions
   return {
     ...createDefaultExportOptions(),
     layoutMode: "fitMultiplePerPage",
-    outputMode: "printSheetsZip",
     pageSize: "letter",
     itemSizeMode: "custom",
     customItemWidth: 2,
@@ -318,12 +269,10 @@ function makeSheetOptions(overrides: Partial<ExportOptions> = {}): ExportOptions
 }
 
 describe("renderCustomDesignPrintSheets", () => {
-  it("renders multiple PDF-design items on a single sheet page", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
-
+  it("renders multiple image-design items on a single sheet page", async () => {
     const bytes = await renderCustomDesignPrintSheets({
-      designBytes: pdfBytes,
-      designAsset: makePdfDesignAsset(),
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
       rows: [{ name: "Alice" }, { name: "Bob" }, { name: "Carol" }],
       fieldBoxes: [makeCsvBox("name")],
       exportOptions: makeSheetOptions(),
@@ -335,12 +284,10 @@ describe("renderCustomDesignPrintSheets", () => {
   });
 
   it("spreads items across multiple sheet pages when needed", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
-
     // Item 5x4in on Letter with default margins/gaps → 2 items per page.
     const bytes = await renderCustomDesignPrintSheets({
-      designBytes: pdfBytes,
-      designAsset: makePdfDesignAsset(),
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
       rows: [{ name: "A" }, { name: "B" }, { name: "C" }],
       fieldBoxes: [makeCsvBox("name")],
       exportOptions: makeSheetOptions({ customItemWidth: 5, customItemHeight: 4 }),
@@ -364,11 +311,9 @@ describe("renderCustomDesignPrintSheets", () => {
   });
 
   it("renders crop marks without breaking the sheet PDF", async () => {
-    const pdfBytes = await makeMinimalPdfBytes();
-
     const bytes = await renderCustomDesignPrintSheets({
-      designBytes: pdfBytes,
-      designAsset: makePdfDesignAsset(),
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
       rows: [{ name: "Alice" }, { name: "Bob" }],
       fieldBoxes: [makeCsvBox("name")],
       exportOptions: makeSheetOptions({ cropMarks: true }),

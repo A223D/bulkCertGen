@@ -1,3 +1,4 @@
+import { FONT_METRICS } from "./fonts/metrics.generated.ts";
 import type { TextBoxStyle } from "./types.ts";
 
 export type TextMeasureInput = {
@@ -100,6 +101,7 @@ function getCharUnits(
   fontFamily: TextBoxStyle["fontFamily"],
   fontWeight: TextBoxStyle["fontWeight"],
 ): number {
+  // PDF standard base fonts use the Adobe AFM width tables above.
   if (fontFamily === "Courier") return COURIER_CHAR_UNITS;
 
   if (fontFamily === "Times") {
@@ -107,7 +109,21 @@ function getCharUnits(
     return table[char] ?? TIMES_FALLBACK;
   }
 
-  // Helvetica (default)
+  if (fontFamily === "Helvetica") {
+    const table = fontWeight === "bold" ? H_BOLD : H_REGULAR;
+    return table[char] ?? HELVETICA_FALLBACK;
+  }
+
+  // Google fonts use width tables generated from the embedded TTF so the
+  // preview fit check matches the rendered PDF. Bold falls back to normal
+  // when the font only ships a single weight.
+  const font = FONT_METRICS[fontFamily];
+  if (font) {
+    const table = (fontWeight === "bold" ? font.bold : font.normal) ?? font.normal;
+    if (table) return table.widths[char] ?? table.fallback;
+  }
+
+  // Unknown font id → conservative Helvetica estimate.
   const table = fontWeight === "bold" ? H_BOLD : H_REGULAR;
   return table[char] ?? HELVETICA_FALLBACK;
 }

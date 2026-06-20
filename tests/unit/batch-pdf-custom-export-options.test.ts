@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CUSTOM_DESIGN_LIMITS } from "../../lib/batch-pdf/limits.ts";
 import {
   applyOrientation,
+  calculateImageResolutionForExport,
   createDefaultExportOptions,
   getCommonPageSizes,
   getPageSizeDefinition,
@@ -38,6 +39,34 @@ function makeOptions(overrides: Partial<ExportOptions> = {}): ExportOptions {
 }
 
 describe("custom design export option utilities", () => {
+  it("calculates effective image DPI and a 300 DPI target size", () => {
+    const result = calculateImageResolutionForExport({
+      designAsset: makeImageDesign({ intrinsicWidth: 1584, intrinsicHeight: 1224 }),
+      exportOptions: makeOptions({
+        itemSizeMode: "custom",
+        customItemWidth: 11,
+        customItemHeight: 8.5,
+        unit: "in",
+      }),
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.dpiX).toBe(144);
+    expect(result?.dpiY).toBe(144);
+    expect(result?.effectiveDpi).toBe(144);
+    expect(result?.targetWidthPx).toBe(3300);
+    expect(result?.targetHeightPx).toBe(2550);
+  });
+
+  it("returns no image DPI when the finished size is unresolved", () => {
+    expect(
+      calculateImageResolutionForExport({
+        designAsset: makeImageDesign(),
+        exportOptions: makeOptions({ itemSizeMode: "fromDesign" }),
+      }),
+    ).toBeNull();
+  });
+
   it("exposes expected common page sizes", () => {
     expect(getCommonPageSizes().map((size) => size.key)).toEqual([
       "letter",

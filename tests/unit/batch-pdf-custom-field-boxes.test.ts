@@ -38,7 +38,7 @@ describe("custom design field box utilities", () => {
       fontSize: CUSTOM_DESIGN_LIMITS.defaultFontSize,
       minFontSize: CUSTOM_DESIGN_LIMITS.defaultMinFontSize,
       color: "#111827",
-      align: "left",
+      align: "center",
       verticalAlign: "middle",
       lineHeight: 1.1,
       uppercase: false,

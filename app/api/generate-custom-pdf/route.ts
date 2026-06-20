@@ -10,6 +10,7 @@ import {
   renderCustomDesignPrintSheets,
 } from "@/lib/batch-pdf/custom/compositor";
 import { makeSafeCustomPdfFilename } from "@/lib/batch-pdf/custom/custom-filenames";
+import { normalizeDesignImageBytes } from "@/lib/batch-pdf/custom/design-image";
 import {
   createPreflightReportCsv,
   PREFLIGHT_REPORT_FILENAME,
@@ -86,7 +87,10 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const buffer = await designFile.arrayBuffer();
-    designBytes = new Uint8Array(buffer);
+    // Re-encode progressive/CMYK JPEGs to baseline so the design renders in the
+    // PDF instead of embedding as an undecodable image. Done once here, then
+    // reused for every row. PNGs remain lossless.
+    designBytes = normalizeDesignImageBytes(new Uint8Array(buffer));
   } catch {
     return jsonError(SAFE_ERROR);
   }

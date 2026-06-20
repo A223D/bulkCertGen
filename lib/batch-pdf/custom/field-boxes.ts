@@ -1,6 +1,7 @@
 import { CUSTOM_DESIGN_LIMITS } from "../limits.ts";
 import type { Result } from "../types.ts";
 import { validateNormalizedRect } from "./coordinates.ts";
+import { isKnownFontFamily } from "./fonts/catalog.ts";
 import type {
   CustomFieldBox,
   FieldSource,
@@ -8,7 +9,6 @@ import type {
   TextOverflowMode,
 } from "./types.ts";
 
-const fontFamilies = ["Helvetica", "Times", "Courier"] as const;
 const fontWeights = ["normal", "bold"] as const;
 const aligns = ["left", "center", "right"] as const;
 const verticalAligns = ["top", "middle", "bottom"] as const;
@@ -41,7 +41,7 @@ export function createDefaultTextBoxStyle(): TextBoxStyle {
     fontSize: CUSTOM_DESIGN_LIMITS.defaultFontSize,
     minFontSize: CUSTOM_DESIGN_LIMITS.defaultMinFontSize,
     color: "#111827",
-    align: "left",
+    align: "center",
     verticalAlign: "middle",
     lineHeight: 1.1,
     uppercase: false,
@@ -50,7 +50,7 @@ export function createDefaultTextBoxStyle(): TextBoxStyle {
 }
 
 export function validateTextBoxStyle(style: TextBoxStyle): Result<TextBoxStyle> {
-  if (!isOneOf(style.fontFamily, fontFamilies)) {
+  if (typeof style.fontFamily !== "string" || !isKnownFontFamily(style.fontFamily)) {
     return error(
       "custom_style_invalid_font_family",
       "Choose a supported font family.",

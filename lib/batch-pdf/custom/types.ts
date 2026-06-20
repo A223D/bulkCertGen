@@ -30,7 +30,8 @@ export type TextOverflowMode =
   | "errorIfOverflow";
 
 export type TextBoxStyle = {
-  fontFamily: "Helvetica" | "Times" | "Courier";
+  /** Font catalog id (see lib/batch-pdf/custom/fonts/catalog.ts). */
+  fontFamily: string;
   fontWeight: "normal" | "bold";
   fontSize: number;
   minFontSize: number;

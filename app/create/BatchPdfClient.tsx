@@ -9,6 +9,8 @@ import { CustomDesignPreview } from "@/components/batch-pdf/custom/CustomDesignP
 import { CustomFieldPlacementEditor } from "@/components/batch-pdf/custom/CustomFieldPlacementEditor";
 import { CustomPreflightPanel } from "@/components/batch-pdf/custom/CustomPreflightPanel";
 import { CustomExportOptionsPanel } from "@/components/batch-pdf/custom/CustomExportOptionsPanel";
+import { useGoogleFonts } from "@/components/batch-pdf/custom/fonts/useGoogleFonts";
+import { cssFontStack } from "@/lib/batch-pdf/custom/fonts/catalog";
 import { TemplatePreviewRenderer } from "@/components/batch-pdf/previews/TemplatePreviewRenderer";
 import {
   autoMapFields,
@@ -30,6 +32,7 @@ import type {
 } from "@/lib/batch-pdf/custom/design-upload-state";
 import { isCustomFieldPlacementReady } from "@/lib/batch-pdf/custom/field-box-state";
 import {
+  calculateImageResolutionForExport,
   createDefaultExportOptions,
   resolveExportItemSizePoints,
   resolveSheetLayoutForExport,
@@ -511,9 +514,7 @@ function getBoxText(box: CustomFieldBox, row: CsvRow): string {
 }
 
 function cssFontFamily(fontFamily: CustomFieldBox["style"]["fontFamily"]): string {
-  if (fontFamily === "Times") return "Times New Roman, serif";
-  if (fontFamily === "Courier") return "Courier New, monospace";
-  return "Arial, Helvetica, sans-serif";
+  return cssFontStack(fontFamily);
 }
 
 function CustomDesignReviewPreview({
@@ -775,6 +776,7 @@ function CustomExportLayoutPreview({
 
 export function BatchPdfClient() {
   const router = useRouter();
+  useGoogleFonts();
 
   const [session, setSession] = useState<SessionState>({
     step: "choose-design",
@@ -1670,12 +1672,16 @@ export function BatchPdfClient() {
       ...getRecommendedFinishedSize(customDesign.asset),
     });
     const previewRow = csv.rows[session.previewRowIndex] ?? csv.rows[0] ?? {};
+    const imageResolution = calculateImageResolutionForExport({
+      designAsset: customDesign.asset,
+      exportOptions: session.customExportOptions,
+    });
 
     let sBg = "#F4F1E9", sBorder = "#E7E2D6", sIcon = "…", sTitle = "Checking…", sBody = "Checking whether the text fits inside your boxes.";
     if (canContinue && hasWarnings) { sBg = "#FBEFCB"; sBorder = "#F0DFA8"; sIcon = "!"; sTitle = "Looks okay"; sBody = "Some text may be adjusted, but you can still continue."; }
     else if (canContinue) { sBg = "#EEF8F1"; sBorder = "#CDEBD9"; sIcon = "✓"; sTitle = "Looks good"; sBody = "The text fits and the finished size is set."; }
     else if (preflightStatus === "blocked") { sBg = "#FBEEEA"; sBorder = "#F2C9BD"; sIcon = "×"; sTitle = "Fix before export"; sBody = "Some text does not fit yet. Make the field box bigger or adjust the text style."; }
-    else if (preflightStatus === "needsOutputSize") { sIcon = "↕"; sTitle = "Choose a finished size"; sBody = "Pick how big each finished PDF should be."; }
+    else if (preflightStatus === "needsOutputSize") { sIcon = "↕"; sTitle = "Choose a finished size"; sBody = "Pick the size each one should be when printed."; }
 
     return (
       <div>
@@ -1686,7 +1692,7 @@ export function BatchPdfClient() {
           The size here is the final printed size, not the image pixel size. Certificates are usually 11 x 8.5 inches; badges and cards are usually smaller.
         </HelpfulTip>
 
-        <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24, alignItems: "start" }}>
+        <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 420px", gap: 24, alignItems: "start" }}>
           <div style={{ display: "grid", gap: 16 }}>
             <CustomDesignReviewPreview
               file={customDesign.file}
@@ -1698,12 +1704,15 @@ export function BatchPdfClient() {
               onPrevious={handlePreviousRow}
               onNext={handleNextRow}
             />
+            <HelpfulTip>
+              Use the row arrows above to test a few real people before continuing — long names are where text usually overflows.
+            </HelpfulTip>
 
             <section style={{ background: "#fff", border: "1px solid #E7E2D6", borderRadius: 18, padding: 18 }}>
               <div style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#9A9486", textTransform: "uppercase", letterSpacing: "0.1em" }}>Finished size</div>
-              <h3 style={{ fontSize: 20, fontWeight: 800, margin: "5px 0 6px", letterSpacing: "-0.01em" }}>How big should each finished PDF be?</h3>
+              <h3 style={{ fontSize: 20, fontWeight: 800, margin: "5px 0 6px", letterSpacing: "-0.01em" }}>What size should each one be when printed?</h3>
               <p style={{ fontSize: 13.5, color: "#6E6A61", lineHeight: 1.5, margin: "0 0 14px" }}>
-                This sets the real print size. The certificate template is usually letter size.
+                This is the real size on paper or card — the same as the page or card you would print and hand out. It is not the image&apos;s pixel size.
               </p>
               <HelpfulTip style={{ marginBottom: 14 }}>
                 If you are unsure, choose the size of the paper or card you plan to hand out.
@@ -1781,7 +1790,44 @@ export function BatchPdfClient() {
                   </label>
                 </div>
               ) : null}
+
+              {imageResolution ? (
+                <div
+                  style={{
+                    marginTop: 14,
+                    border: `1px solid ${imageResolution.effectiveDpi < 150 ? "#F0DFA8" : "#CDEBD9"}`,
+                    background: imageResolution.effectiveDpi < 150 ? "#FFFAEB" : "#EEF8F1",
+                    borderRadius: 11,
+                    padding: "11px 12px",
+                    color: "#4A463E",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <strong>{Math.round(imageResolution.effectiveDpi)} DPI at this size.</strong>{" "}
+                  {imageResolution.effectiveDpi < 150 ? (
+                    <>
+                      The PDF uses the image&apos;s full pixel dimensions, but this may look soft in print. For
+                      approximately {imageResolution.targetDpi} DPI, upload at least{" "}
+                      {imageResolution.targetWidthPx} × {imageResolution.targetHeightPx} px or
+                      choose a smaller finished size.
+                    </>
+                  ) : (
+                    <>The uploaded image has a suitable resolution for this finished size.</>
+                  )}
+                </div>
+              ) : null}
             </section>
+          </div>
+
+          <aside data-raside style={{ position: "sticky", top: 130, display: "grid", gap: 14 }}>
+            <div style={{ background: sBg, border: `1px solid ${sBorder}`, borderRadius: 16, padding: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 32, height: 32, borderRadius: 9, background: "#fff", border: `1px solid ${sBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{sIcon}</span>
+                <span style={{ fontSize: 16, fontWeight: 800 }}>{sTitle}</span>
+              </div>
+              <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "12px 0 0", color: "#4A463E" }}>{sBody}</p>
+            </div>
 
             <CustomPreflightPanel
               key={`${customDesign.asset.fileName}-${customDesign.asset.sizeBytes}`}
@@ -1792,19 +1838,7 @@ export function BatchPdfClient() {
               exportOptions={session.customExportOptions}
               onPreflightResultChange={handleCustomPreflightResultChange}
             />
-          </div>
 
-          <aside data-raside style={{ position: "sticky", top: 130 }}>
-            <div style={{ background: sBg, border: `1px solid ${sBorder}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 32, height: 32, borderRadius: 9, background: "#fff", border: `1px solid ${sBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{sIcon}</span>
-                <span style={{ fontSize: 16, fontWeight: 800 }}>{sTitle}</span>
-              </div>
-              <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "12px 0 0", color: "#4A463E" }}>{sBody}</p>
-            </div>
-            <HelpfulTip style={{ marginBottom: 12 }}>
-              Use the row arrows to test a few real people before continuing.
-            </HelpfulTip>
             <button
               type="button"
               disabled={!canContinue}
@@ -1813,7 +1847,7 @@ export function BatchPdfClient() {
             >
               {hasWarnings ? "Continue with warnings →" : "Continue to export setup →"}
             </button>
-            <button type="button" onClick={() => goToStep("mapping")} style={{ width: "100%", marginTop: 10, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+            <button type="button" onClick={() => goToStep("mapping")} style={{ width: "100%", marginTop: -4, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
               ← Back to placing fields
             </button>
           </aside>
@@ -1849,10 +1883,10 @@ export function BatchPdfClient() {
         <div style={STEP_LABEL_STYLE}>Step 6 · Export setup</div>
         <h2 style={H2}>How should the final pages look?</h2>
         <p style={{ ...SUBTEXT, maxWidth: 680 }}>
-          Pick one PDF per row, or place multiple finished designs on each page for printing and cutting.
+          Give each one its own page, or fit several on a page so you can print and cut them out.
         </p>
         <HelpfulTip style={{ maxWidth: 720, marginBottom: 16 }}>
-          Use one PDF per row for certificates. Use multiple per page for badges, tickets, labels, and anything you will cut after printing.
+          Choose one per page for certificates. Choose several on a page for badges, tickets, labels, and anything you will cut out after printing.
         </HelpfulTip>
 
         <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, alignItems: "start" }}>
@@ -1997,9 +2031,17 @@ export function BatchPdfClient() {
   const isCustomPlacementStep = Boolean(
     session.csv && session.step === "mapping" && isCustomMode,
   );
-  const createShellMaxWidth = isCustomPlacementStep
-    ? "min(1360px, calc(100vw - 40px))"
-    : "min(1180px, calc(100vw - 40px))";
+  // Preview/export-setup also benefit from a wider shell so the design preview
+  // and the text-fit panel can sit side by side without wasted margins.
+  const isWideCustomStep = Boolean(
+    session.csv &&
+      isCustomMode &&
+      (session.step === "preview" || session.step === "export-options"),
+  );
+  const createShellMaxWidth =
+    isCustomPlacementStep || isWideCustomStep
+      ? "min(1360px, calc(100vw - 40px))"
+      : "min(1180px, calc(100vw - 40px))";
   const createShellPadding = isCustomPlacementStep
     ? "clamp(18px, 2.4vh, 26px) clamp(14px, 2vw, 24px) 64px"
     : "clamp(22px, 3vh, 34px) clamp(18px, 3vw, 32px) 80px";

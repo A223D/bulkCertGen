@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import {
   renderCustomDesignPdfForRow,
@@ -32,6 +35,10 @@ function b64ToBytes(b64: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+function pdfBytesToLatin1(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("latin1");
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +241,23 @@ describe("renderCustomDesignPdfForRow", () => {
     await expect(PDFDocument.load(outputBytes)).resolves.toBeTruthy();
   });
 
+  it("uses classic objects and an xref table for broad viewer compatibility", async () => {
+    const outputBytes = await renderCustomDesignPdfForRow({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      row: {},
+      fieldBoxes: [makeStaticTextBox()],
+      exportOptions: makeImageExportOptions(),
+    });
+
+    const pdf = pdfBytesToLatin1(outputBytes);
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdf).toContain("\nxref\n");
+    expect(pdf).not.toContain("/Type /ObjStm");
+    expect(pdf).not.toContain("/Type /XRef");
+    expect(pdf).toContain("/Interpolate true");
+  });
+
   it("renders multiple field boxes on the same page without throwing", async () => {
     await expect(
       renderCustomDesignPdfForRow({
@@ -310,6 +334,23 @@ describe("renderCustomDesignPrintSheets", () => {
     await expect(PDFDocument.load(bytes)).resolves.toBeTruthy();
   });
 
+  it("saves print sheets with classic objects for broad viewer compatibility", async () => {
+    const bytes = await renderCustomDesignPrintSheets({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      rows: [{ name: "Alice" }, { name: "Bob" }],
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeSheetOptions(),
+    });
+
+    const pdf = pdfBytesToLatin1(bytes);
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdf).toContain("\nxref\n");
+    expect(pdf).not.toContain("/Type /ObjStm");
+    expect(pdf).not.toContain("/Type /XRef");
+    expect(pdf).toContain("/Interpolate true");
+  });
+
   it("renders crop marks without breaking the sheet PDF", async () => {
     const bytes = await renderCustomDesignPrintSheets({
       designBytes: b64ToBytes(PNG_1X1_B64),
@@ -320,5 +361,38 @@ describe("renderCustomDesignPrintSheets", () => {
     });
 
     await expect(PDFDocument.load(bytes)).resolves.toBeTruthy();
+  });
+});
+
+const FIXTURE_FONT = new Uint8Array(
+  readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../fixtures/sample-font.ttf"),
+  ),
+);
+
+describe("compositor renders Google-font text", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("embeds a Google font when rendering a row PDF", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(FIXTURE_FONT, { status: 200 })),
+    );
+    const box = makeStaticTextBox({
+      style: { ...createDefaultTextBoxStyle(), fontFamily: "Playfair Display", fontWeight: "bold" },
+    });
+    const bytes = await renderCustomDesignPdfForRow({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      row: {} as CsvRow,
+      fieldBoxes: [box],
+      exportOptions: makeImageExportOptions(),
+    });
+
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBe(1);
+    expect(bytes.byteLength).toBeGreaterThan(1000);
   });
 });

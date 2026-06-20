@@ -19,8 +19,8 @@ export function ExportLayoutModePicker({
         value={value}
         onChange={onChange}
         options={[
-          { value: "onePerPage", label: "One PDF per row" },
-          { value: "fitMultiplePerPage", label: "Print sheets — fit multiple per page" },
+          { value: "onePerPage", label: "One per page" },
+          { value: "fitMultiplePerPage", label: "Several on a page (to cut out)" },
         ]}
       />
     </ControlGroup>

@@ -1,4 +1,11 @@
-import { PDFDocument, rgb } from "pdf-lib";
+import {
+  PDFBool,
+  PDFDocument,
+  PDFName,
+  PDFRawStream,
+  rgb,
+} from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import type { PDFFont, PDFPage } from "pdf-lib";
 import { normalizedRectToPoints } from "./coordinates.ts";
 import { calculateCropMarks } from "./crop-marks.ts";
@@ -6,10 +13,10 @@ import { resolveSheetLayoutForExport } from "./export-options.ts";
 import { resolveDesignItemSizeForPreflight } from "./preflight.ts";
 import { resolveTextFit } from "./text-fit.ts";
 import { estimateTextBlockHeightPt } from "./text-measurement.ts";
+import { resolveFontSource } from "./fonts/server-fonts.ts";
 import {
   calculateTextStartPosition,
   parseHexColorToRgb,
-  resolvePdfFontName,
 } from "./pdf-text.ts";
 import type { CsvRow } from "../types.ts";
 import type { CustomFieldBox, DesignAsset, ExportOptions, TextBoxStyle } from "./types.ts";
@@ -37,6 +44,34 @@ type FontFactory = (
 
 // Draws the design background into an item rectangle on the given page.
 type BackgroundDrawer = (page: PDFPage, itemRect: ItemRect) => void;
+
+// Some lightweight and older PDF viewers fail to resolve pdf-lib's compressed
+// object/xref streams and display an otherwise valid custom export as a blank
+// page. Classic indirect objects and an xref table are larger, but maximize
+// compatibility for files intended to be downloaded and opened anywhere.
+const COMPATIBLE_PDF_SAVE_OPTIONS = { useObjectStreams: false } as const;
+
+async function saveCompatiblePdf(document: PDFDocument): Promise<Uint8Array> {
+  const bytes = await document.save(COMPATIBLE_PDF_SAVE_OPTIONS);
+
+  // pdf-lib's classic writer always advertises PDF 1.7. This renderer only
+  // uses PDF 1.4 features, and the version strings have equal length, so the
+  // one-byte change preserves every xref offset while avoiding viewer-specific
+  // PDF 1.7 rendering paths.
+  if (
+    bytes[0] === 0x25 && // %
+    bytes[1] === 0x50 && // P
+    bytes[2] === 0x44 && // D
+    bytes[3] === 0x46 && // F
+    bytes[4] === 0x2d && // -
+    bytes[5] === 0x31 && // 1
+    bytes[6] === 0x2e // .
+  ) {
+    bytes[7] = 0x34; // 4
+  }
+
+  return bytes;
+}
 
 // ---------------------------------------------------------------------------
 // One PDF per row (Phase 11 behavior, refactored onto the shared item renderer)
@@ -75,7 +110,7 @@ export async function renderCustomDesignPdfForRow(
     itemRect: { xPt: 0, yPt: 0, widthPt: pageWidthPt, heightPt: pageHeightPt },
   });
 
-  return outputDoc.save();
+  return saveCompatiblePdf(outputDoc);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +167,7 @@ export async function renderCustomDesignPrintSheets(args: {
     }
   }
 
-  return outputPdf.save();
+  return saveCompatiblePdf(outputPdf);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,6 +257,15 @@ async function embedBackgroundDrawer(
       ? await outputPdf.embedPng(designBytes)
       : await outputPdf.embedJpg(designBytes);
 
+  // Embed now so we can set the image rendering intent before the document is
+  // saved. Interpolation improves the appearance of raster designs whenever a
+  // viewer displays or prints them at a size different from their pixel grid.
+  await image.embed();
+  const imageStream = outputPdf.context.lookup(image.ref);
+  if (imageStream instanceof PDFRawStream) {
+    imageStream.dict.set(PDFName.of("Interpolate"), PDFBool.True);
+  }
+
   return (page, itemRect) => {
     const bottomLeftY = page.getHeight() - itemRect.yPt - itemRect.heightPt;
     page.drawImage(image, {
@@ -235,13 +279,18 @@ async function embedBackgroundDrawer(
 
 function makeFontFactory(doc: PDFDocument): FontFactory {
   const fontCache = new Map<string, PDFFont>();
+  // Required before embedding any custom (non-standard) font.
+  doc.registerFontkit(fontkit);
 
   return async (fontFamily, fontWeight) => {
     const cacheKey = `${fontFamily}/${fontWeight}`;
     const cached = fontCache.get(cacheKey);
     if (cached) return cached;
-    const fontName = resolvePdfFontName({ fontFamily, fontWeight });
-    const font = await doc.embedFont(fontName);
+    const source = await resolveFontSource(fontFamily, fontWeight);
+    const font =
+      source.kind === "standard"
+        ? await doc.embedFont(source.name)
+        : await doc.embedFont(source.bytes, { subset: true });
     fontCache.set(cacheKey, font);
     return font;
   };

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TextStyleControls } from "./TextStyleControls";
+import { FontPicker } from "./fonts/FontPicker";
 import { CUSTOM_DESIGN_LIMITS } from "@/lib/batch-pdf/limits";
 import type { CustomFieldBox, FieldSource, TextBoxStyle } from "@/lib/batch-pdf/custom/types";
 
@@ -139,17 +140,10 @@ export function FieldBoxInspector({
       <div className="grid grid-cols-2 gap-3">
         <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           <span>Font</span>
-          <select
+          <FontPicker
             value={box.style.fontFamily}
-            onChange={(event) =>
-              updateStyle({ fontFamily: event.target.value as TextBoxStyle["fontFamily"] })
-            }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium normal-case tracking-normal text-ink"
-          >
-            <option value="Helvetica">Helvetica</option>
-            <option value="Times">Times</option>
-            <option value="Courier">Courier</option>
-          </select>
+            onChange={(fontFamily) => updateStyle({ fontFamily })}
+          />
         </label>
         <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           <span>Weight</span>
@@ -175,16 +169,16 @@ export function FieldBoxInspector({
             <button
               type="button"
               onClick={() => updateFontSize(-2)}
-              className="flex-1 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-panel"
+              className="flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-panel"
             >
-              Smaller
+              <span aria-hidden>↓</span> Smaller
             </button>
             <button
               type="button"
               onClick={() => updateFontSize(2)}
-              className="flex-1 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-panel"
+              className="flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-panel"
             >
-              Bigger
+              <span aria-hidden>↑</span> Bigger
             </button>
           </div>
         </div>
@@ -244,16 +238,6 @@ export function FieldBoxInspector({
 
         {showMore ? (
           <div className="mt-4 space-y-4">
-            <label className="space-y-1 text-xs font-medium text-muted-foreground">
-              <span>Field name</span>
-              <input
-                type="text"
-                value={box.label}
-                onChange={(event) => onUpdate(box.id, { label: event.target.value })}
-                className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
-              />
-            </label>
-
             <TextStyleControls
               style={box.style}
               onChange={(style) => onUpdate(box.id, { style })}

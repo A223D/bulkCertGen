@@ -2,8 +2,11 @@
 
 import { useMemo, useEffect } from "react";
 import { PreflightSummary } from "./PreflightSummary";
-import { PreflightIssueList } from "./PreflightIssueList";
-import { runCustomDesignPreflight } from "@/lib/batch-pdf/custom/preflight";
+import { PreflightIssueList, type DisplayIssue } from "./PreflightIssueList";
+import {
+  getFieldBoxTextForRow,
+  runCustomDesignPreflight,
+} from "@/lib/batch-pdf/custom/preflight";
 import type {
   CustomFieldBox,
   DesignAsset,
@@ -65,8 +68,22 @@ export function CustomPreflightPanel({
     );
   }
 
-  const displayIssues = preflightResult.issues.slice(0, MAX_DISPLAY_ISSUES);
-  const hiddenIssueCount = preflightResult.issues.length - displayIssues.length;
+  const shown = preflightResult.issues.slice(0, MAX_DISPLAY_ISSUES);
+  const hiddenIssueCount = preflightResult.issues.length - shown.length;
+
+  // Resolve the actual offending text for each issue. This stays in the browser
+  // (the CSV is already here) so the user sees exactly what does not fit — the
+  // privacy-safe preflight result still carries no raw values.
+  const boxById = new Map(fieldBoxes.map((box) => [box.id, box]));
+  const displayItems: DisplayIssue[] = shown.map((issue) => {
+    if (typeof issue.rowIndex !== "number" || !issue.fieldBoxId) {
+      return { issue };
+    }
+    const box = boxById.get(issue.fieldBoxId);
+    const row = rows[issue.rowIndex];
+    if (!box || !row) return { issue };
+    return { issue, sampleText: getFieldBoxTextForRow({ row, box }).text };
+  });
 
   return (
     <section className="space-y-4 rounded-lg border border-line bg-panel p-4">
@@ -76,8 +93,8 @@ export function CustomPreflightPanel({
 
       <PreflightSummary result={preflightResult} />
 
-      {displayIssues.length > 0 ? (
-        <PreflightIssueList issues={displayIssues} hiddenCount={hiddenIssueCount} />
+      {displayItems.length > 0 ? (
+        <PreflightIssueList items={displayItems} hiddenCount={hiddenIssueCount} />
       ) : null}
     </section>
   );

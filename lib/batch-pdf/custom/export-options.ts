@@ -148,6 +148,51 @@ export function measurementToPoints(value: number, unit: MeasurementUnit): numbe
   return unit === "in" ? inchesToPoints(value) : mmToPoints(value);
 }
 
+export type ImageResolutionInfo = {
+  dpiX: number;
+  dpiY: number;
+  effectiveDpi: number;
+  targetDpi: number;
+  targetWidthPx: number;
+  targetHeightPx: number;
+};
+
+/** Describes the uploaded image resolution at the selected physical item size. */
+export function calculateImageResolutionForExport(args: {
+  designAsset: DesignAsset;
+  exportOptions: ExportOptions;
+  targetDpi?: number;
+}): ImageResolutionInfo | null {
+  const { designAsset, exportOptions, targetDpi = 300 } = args;
+  const size = resolveExportItemSizePoints({ exportOptions, designAsset });
+
+  if (
+    !size.ok ||
+    !Number.isFinite(designAsset.intrinsicWidth) ||
+    !Number.isFinite(designAsset.intrinsicHeight) ||
+    designAsset.intrinsicWidth <= 0 ||
+    designAsset.intrinsicHeight <= 0 ||
+    !Number.isFinite(targetDpi) ||
+    targetDpi <= 0
+  ) {
+    return null;
+  }
+
+  const widthInches = size.value.widthPt / 72;
+  const heightInches = size.value.heightPt / 72;
+  const dpiX = designAsset.intrinsicWidth / widthInches;
+  const dpiY = designAsset.intrinsicHeight / heightInches;
+
+  return {
+    dpiX,
+    dpiY,
+    effectiveDpi: Math.min(dpiX, dpiY),
+    targetDpi,
+    targetWidthPx: Math.ceil(widthInches * targetDpi),
+    targetHeightPx: Math.ceil(heightInches * targetDpi),
+  };
+}
+
 export function resolveExportPageSizePoints(options: ExportOptions): Result<{
   widthPt: number;
   heightPt: number;

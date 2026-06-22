@@ -11,6 +11,7 @@ import {
   mmToPoints,
   resolveExportItemSizePoints,
   resolveExportPageSizePoints,
+  resolveOutputMode,
   resolveSheetPageSizePoints,
   validateExportOptions,
 } from "../../lib/batch-pdf/custom/export-options.ts";
@@ -152,6 +153,46 @@ describe("custom design export option utilities", () => {
     expect(validateExportOptions(makeOptions({ layoutMode: "fitMultiplePerPage" })).ok).toBe(
       true,
     );
+  });
+
+  it("defaults output mode to a single combined PDF", () => {
+    expect(createDefaultExportOptions().outputMode).toBe("combinedPdf");
+  });
+
+  it("resolves output mode, treating undefined as combinedPdf", () => {
+    expect(resolveOutputMode({ outputMode: undefined })).toBe("combinedPdf");
+    expect(resolveOutputMode({ outputMode: "combinedPdf" })).toBe("combinedPdf");
+    expect(resolveOutputMode({ outputMode: "separateFiles" })).toBe("separateFiles");
+  });
+
+  it("accepts valid output modes and rejects invalid ones", () => {
+    expect(validateExportOptions(makeOptions({ outputMode: "combinedPdf" })).ok).toBe(true);
+    expect(validateExportOptions(makeOptions({ outputMode: "separateFiles" })).ok).toBe(true);
+    expect(validateExportOptions(makeOptions({ outputMode: undefined })).ok).toBe(true);
+    expect(
+      validateExportOptions(
+        makeOptions({ outputMode: "bogus" as unknown as ExportOptions["outputMode"] }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it("defaults background encoding to lossless PNG", () => {
+    expect(createDefaultExportOptions().backgroundEncoding).toBe("preservePng");
+  });
+
+  it("accepts valid background encodings and rejects invalid ones", () => {
+    expect(validateExportOptions(makeOptions({ backgroundEncoding: "preservePng" })).ok).toBe(true);
+    expect(validateExportOptions(makeOptions({ backgroundEncoding: "baselineJpeg" })).ok).toBe(
+      true,
+    );
+    expect(validateExportOptions(makeOptions({ backgroundEncoding: undefined })).ok).toBe(true);
+    expect(
+      validateExportOptions(
+        makeOptions({
+          backgroundEncoding: "bogus" as unknown as ExportOptions["backgroundEncoding"],
+        }),
+      ).ok,
+    ).toBe(false);
   });
 
   it("validates non-negative margins and gaps", () => {

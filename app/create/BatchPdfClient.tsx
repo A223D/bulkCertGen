@@ -339,6 +339,21 @@ async function waitForMinimumExportLoading(startedAt: number): Promise<void> {
   await wait(Math.max(0, MIN_EXPORT_LOADING_MS - elapsed));
 }
 
+// Prefer the server's Content-Disposition filename; otherwise derive the
+// extension from the Content-Type so single-PDF exports download as .pdf and
+// ZIP exports as .zip.
+function filenameFromResponse(res: Response, fallback: string): string {
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^"]+)"?/i.exec(disposition);
+  if (match?.[1]) return match[1];
+
+  const contentType = res.headers.get("Content-Type") ?? "";
+  const base = fallback.replace(/\.[^.]+$/, "");
+  if (contentType.includes("application/pdf")) return `${base}.pdf`;
+  if (contentType.includes("application/zip")) return `${base}.zip`;
+  return fallback;
+}
+
 // ── Thumbnail mini-previews ───────────────────────────────────────────────────
 
 function CertThumbnail() {
@@ -1201,7 +1216,10 @@ export function BatchPdfClient() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "batch-pdf-custom-export.zip";
+      // The endpoint returns either a single PDF (combined output) or a ZIP
+      // (separate files / print sheets / report included). Honor what the
+      // server actually sent instead of assuming .zip.
+      a.download = filenameFromResponse(res, "batch-pdf-custom-export.zip");
       document.body.appendChild(a);
       a.click();
       a.remove();

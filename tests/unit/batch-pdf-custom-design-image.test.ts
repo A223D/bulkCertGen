@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
-import { normalizeDesignImageBytes } from "@/lib/batch-pdf/custom/design-image";
+import {
+  encodeDesignAsBaselineJpeg,
+  normalizeDesignImageBytes,
+} from "@/lib/batch-pdf/custom/design-image";
 import { renderCustomDesignPdfForRow } from "@/lib/batch-pdf/custom/compositor";
 import { createDefaultExportOptions } from "@/lib/batch-pdf/custom/export-options";
 import { createDefaultTextBoxStyle } from "@/lib/batch-pdf/custom/field-boxes";
@@ -55,6 +59,51 @@ describe("normalizeDesignImageBytes", () => {
   it("passes non-JPEG bytes through unchanged", () => {
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
     expect(normalizeDesignImageBytes(png)).toBe(png);
+  });
+});
+
+// Build a valid RGBA PNG with sharp so the test exercises a real image (tiny
+// hand-crafted PNGs trip libpng's stricter reader).
+const require = createRequire(import.meta.url);
+const sharp = require("sharp") as (input?: unknown) => {
+  png: () => { toBuffer: () => Promise<Buffer> };
+};
+
+async function makeTestPng(): Promise<Uint8Array> {
+  const buf = await sharp({
+    create: {
+      width: 8,
+      height: 8,
+      channels: 4,
+      background: { r: 200, g: 30, b: 30, alpha: 0.5 },
+    },
+  } as unknown)
+    .png()
+    .toBuffer();
+  return new Uint8Array(buf);
+}
+
+describe("encodeDesignAsBaselineJpeg", () => {
+  it("re-encodes a PNG to a baseline JPEG that pdf-lib can embed", async () => {
+    const out = await encodeDesignAsBaselineJpeg(await makeTestPng());
+    expect(out).not.toBeNull();
+    if (!out) throw new Error("expected JPEG bytes");
+
+    // JPEG SOI marker.
+    expect(out[0]).toBe(0xff);
+    expect(out[1]).toBe(0xd8);
+    // Not progressive, so it embeds as a renderable DCTDecode image.
+    expect(isProgressiveJpeg(out)).toBe(false);
+
+    const doc = await PDFDocument.create();
+    const img = await doc.embedJpg(out);
+    expect(img.width).toBe(8);
+    expect(img.height).toBe(8);
+  });
+
+  it("returns null for bytes that are not a decodable image", async () => {
+    const out = await encodeDesignAsBaselineJpeg(new Uint8Array([0, 1, 2, 3, 4]));
+    expect(out).toBeNull();
   });
 });
 

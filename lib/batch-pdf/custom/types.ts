@@ -70,6 +70,18 @@ export type ExportOptions = {
   pageSize: PageSizeKey;
   orientation: "portrait" | "landscape" | "auto";
   layoutMode: "onePerPage" | "fitMultiplePerPage";
+  // How one-per-page output is delivered. "combinedPdf" (default) emits a single
+  // multi-page PDF — background and font are embedded once for the whole batch,
+  // which is dramatically faster and lighter on memory. "separateFiles" emits
+  // one PDF per row inside a ZIP. Only meaningful when layoutMode is
+  // "onePerPage" (fitMultiplePerPage is always a single PDF). Optional for
+  // backwards compatibility; treat undefined as "combinedPdf".
+  outputMode?: "combinedPdf" | "separateFiles";
+  // How the background image is embedded. "preservePng" (default) keeps the
+  // uploaded image lossless. "baselineJpeg" re-encodes it to a baseline JPEG so
+  // pdf-lib embeds the bytes directly (no deflate) — smaller and faster, but
+  // lossy. Optional; treat undefined as "preservePng".
+  backgroundEncoding?: "preservePng" | "baselineJpeg";
   itemSizeMode: "fromDesign" | "custom";
   customItemWidth?: number;
   customItemHeight?: number;

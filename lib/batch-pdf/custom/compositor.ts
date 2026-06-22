@@ -114,6 +114,147 @@ export async function renderCustomDesignPdfForRow(
 }
 
 // ---------------------------------------------------------------------------
+// Separate-files renderer — reuses one prebuilt background across all rows
+// ---------------------------------------------------------------------------
+
+export type SeparateFileRenderer = {
+  renderRow: (row: CsvRow) => Promise<Uint8Array>;
+};
+
+/**
+ * Builds a renderer for the one-PDF-per-row (separate files) path that embeds
+ * the background image exactly once into a base document, then clones that page
+ * per row via `copyPages`. `copyPages` copies the already-compressed image
+ * XObject by value, so the ~5.8 MB raw image is never re-decoded or re-deflated
+ * for each row — only the small compressed object is copied. Text (and crop
+ * marks) are drawn onto the cloned page; the background is already present, so
+ * the per-row draw uses a no-op background drawer.
+ *
+ * Fonts are still embedded per output document (pdf-lib embeds fonts per
+ * document); the image is the dominant cost, so this is left as-is.
+ */
+export async function createSeparateFileRenderer(args: {
+  designBytes: Uint8Array;
+  designAsset: DesignAsset;
+  fieldBoxes: CustomFieldBox[];
+  exportOptions: ExportOptions;
+}): Promise<SeparateFileRenderer> {
+  const { designBytes, designAsset, fieldBoxes, exportOptions } = args;
+
+  const sizeResult = resolveDesignItemSizeForPreflight({
+    design: designAsset,
+    exportOptions,
+  });
+
+  if (!sizeResult.ok) {
+    throw new Error(
+      "Image design requires a physical item size. Set width and height in the export options.",
+    );
+  }
+
+  const pageWidthPt = sizeResult.value.widthPt;
+  const pageHeightPt = sizeResult.value.heightPt;
+
+  // Embed the background once into a base document and draw it onto a base page.
+  const baseDoc = await PDFDocument.create();
+  const basePage = baseDoc.addPage([pageWidthPt, pageHeightPt]);
+  const drawBackground = await embedBackgroundDrawer(baseDoc, designBytes, designAsset);
+  drawBackground(basePage, {
+    xPt: 0,
+    yPt: 0,
+    widthPt: pageWidthPt,
+    heightPt: pageHeightPt,
+  });
+
+  const itemRect: ItemRect = {
+    xPt: 0,
+    yPt: 0,
+    widthPt: pageWidthPt,
+    heightPt: pageHeightPt,
+  };
+
+  return {
+    renderRow: async (row: CsvRow): Promise<Uint8Array> => {
+      const outputDoc = await PDFDocument.create();
+      const [page] = await outputDoc.copyPages(baseDoc, [0]);
+      outputDoc.addPage(page);
+
+      const getFont = makeFontFactory(outputDoc);
+
+      await drawItemContent({
+        page,
+        // Background is already on the copied page; only draw text + crop marks.
+        drawBackground: () => {},
+        getFont,
+        row,
+        fieldBoxes,
+        exportOptions,
+        itemRect,
+      });
+
+      return saveCompatiblePdf(outputDoc);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Combined multi-page PDF — one page per row, single document
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders every row into a single multi-page PDF (one page per row at the item
+ * size). The background image and each font are embedded exactly once for the
+ * whole batch and reused on every page, which is dramatically faster and uses
+ * far less memory than building one document per row.
+ */
+export async function renderCustomDesignCombinedPdf(args: {
+  designBytes: Uint8Array;
+  designAsset: DesignAsset;
+  rows: CsvRow[];
+  fieldBoxes: CustomFieldBox[];
+  exportOptions: ExportOptions;
+}): Promise<Uint8Array> {
+  const { designBytes, designAsset, rows, fieldBoxes, exportOptions } = args;
+
+  const sizeResult = resolveDesignItemSizeForPreflight({
+    design: designAsset,
+    exportOptions,
+  });
+
+  if (!sizeResult.ok) {
+    throw new Error(
+      "Image design requires a physical item size. Set width and height in the export options.",
+    );
+  }
+
+  const pageWidthPt = sizeResult.value.widthPt;
+  const pageHeightPt = sizeResult.value.heightPt;
+
+  const outputPdf = await PDFDocument.create();
+  // Embed background + fonts once for the whole document, then reuse per page.
+  const drawBackground = await embedBackgroundDrawer(outputPdf, designBytes, designAsset);
+  const getFont = makeFontFactory(outputPdf);
+
+  // Always produce at least one page so the PDF is valid even with no rows.
+  const effectiveRows = rows.length > 0 ? rows : [{}];
+
+  for (const row of effectiveRows) {
+    const page = outputPdf.addPage([pageWidthPt, pageHeightPt]);
+    await drawItemContent({
+      page,
+      drawBackground,
+      getFont,
+      row,
+      fieldBoxes,
+      exportOptions,
+      itemRect: { xPt: 0, yPt: 0, widthPt: pageWidthPt, heightPt: pageHeightPt },
+    });
+  }
+
+  return saveCompatiblePdf(outputPdf);
+}
+
+// ---------------------------------------------------------------------------
 // Print sheets — fit multiple per page
 // ---------------------------------------------------------------------------
 

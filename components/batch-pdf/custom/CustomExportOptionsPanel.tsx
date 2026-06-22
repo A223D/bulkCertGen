@@ -2,6 +2,8 @@
 
 import { useCallback } from "react";
 import { ExportLayoutModePicker } from "./ExportLayoutModePicker";
+import { ExportOutputModePicker } from "./ExportOutputModePicker";
+import { ExportImageQualityPicker } from "./ExportImageQualityPicker";
 import { PageSizeControls } from "./PageSizeControls";
 import { ItemSizeControls } from "./ItemSizeControls";
 import { SheetSpacingControls } from "./SheetSpacingControls";
@@ -78,10 +80,18 @@ export function CustomExportOptionsPanel({
           <SheetSpacingControls options={exportOptions} onChange={patch} />
         </>
       ) : (
-        <p className="text-xs leading-5 text-muted-foreground">
-          Each row becomes its own PDF at the item size above.
-        </p>
+        <ExportOutputModePicker
+          value={exportOptions.outputMode ?? "combinedPdf"}
+          onChange={(outputMode) => patch({ outputMode })}
+        />
       )}
+
+      {design.kind === "png" ? (
+        <ExportImageQualityPicker
+          value={exportOptions.backgroundEncoding ?? "preservePng"}
+          onChange={(backgroundEncoding) => patch({ backgroundEncoding })}
+        />
+      ) : null}
 
       <FilenameColumnControl options={exportOptions} csvHeaders={csvHeaders} onChange={patch} />
 

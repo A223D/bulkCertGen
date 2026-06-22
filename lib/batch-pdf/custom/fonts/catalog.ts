@@ -1,4 +1,4 @@
-import fontList from "./font-list.json";
+import fontList from "./font-list.json" with { type: "json" };
 
 export type FontCategory =
   | "sans"

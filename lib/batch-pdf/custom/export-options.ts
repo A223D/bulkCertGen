@@ -343,6 +343,8 @@ export function createDefaultExportOptions(): ExportOptions {
     pageSize: "sameAsDesign",
     orientation: "portrait",
     layoutMode: "onePerPage",
+    outputMode: "combinedPdf",
+    backgroundEncoding: "preservePng",
     itemSizeMode: "fromDesign",
     unit: "in",
     marginTop: CUSTOM_DESIGN_LIMITS.defaultMarginInches,
@@ -354,6 +356,16 @@ export function createDefaultExportOptions(): ExportOptions {
     cropMarks: false,
     includeOverflowReport: true,
   };
+}
+
+/**
+ * Resolves the effective one-per-page delivery format. Undefined (older
+ * payloads) defaults to the single combined PDF.
+ */
+export function resolveOutputMode(
+  options: Pick<ExportOptions, "outputMode">,
+): "combinedPdf" | "separateFiles" {
+  return options.outputMode === "separateFiles" ? "separateFiles" : "combinedPdf";
 }
 
 export function validateExportOptions(
@@ -371,6 +383,22 @@ export function validateExportOptions(
 
   if (options.layoutMode !== "onePerPage" && options.layoutMode !== "fitMultiplePerPage") {
     return error("custom_export_invalid_layout", "Choose a supported layout.");
+  }
+
+  if (
+    options.outputMode !== undefined &&
+    options.outputMode !== "combinedPdf" &&
+    options.outputMode !== "separateFiles"
+  ) {
+    return error("custom_export_invalid_output_mode", "Choose a supported output format.");
+  }
+
+  if (
+    options.backgroundEncoding !== undefined &&
+    options.backgroundEncoding !== "preservePng" &&
+    options.backgroundEncoding !== "baselineJpeg"
+  ) {
+    return error("custom_export_invalid_bg_encoding", "Choose a supported image quality.");
   }
 
   if (options.itemSizeMode !== "fromDesign" && options.itemSizeMode !== "custom") {

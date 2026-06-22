@@ -6,16 +6,29 @@ import {
 } from "@/lib/batch-pdf/custom/export-request";
 import { runCustomDesignPreflight } from "@/lib/batch-pdf/custom/preflight";
 import {
-  renderCustomDesignPdfForRow,
+  createSeparateFileRenderer,
+  renderCustomDesignCombinedPdf,
   renderCustomDesignPrintSheets,
 } from "@/lib/batch-pdf/custom/compositor";
+import { resolveOutputMode } from "@/lib/batch-pdf/custom/export-options";
 import { makeSafeCustomPdfFilename } from "@/lib/batch-pdf/custom/custom-filenames";
-import { normalizeDesignImageBytes } from "@/lib/batch-pdf/custom/design-image";
+import {
+  encodeDesignAsBaselineJpeg,
+  normalizeDesignImageBytes,
+} from "@/lib/batch-pdf/custom/design-image";
 import {
   createPreflightReportCsv,
   PREFLIGHT_REPORT_FILENAME,
 } from "@/lib/batch-pdf/custom/export-report";
-import { createPdfZip } from "@/lib/batch-pdf/zip";
+import { createPdfZip, createPdfZipStream } from "@/lib/batch-pdf/zip";
+import { mapWithConcurrency } from "@/lib/batch-pdf/concurrency";
+import { getCustomExportConcurrency } from "@/lib/batch-pdf/limits";
+import {
+  getWorkerPoolSize,
+  renderSeparateFilesWithWorkers,
+  workersEnabled,
+  WORKER_ROW_THRESHOLD,
+} from "@/lib/batch-pdf/worker-pool";
 
 export const runtime = "nodejs";
 
@@ -116,46 +129,146 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError(SAFE_ERROR);
   }
 
+  const outputMode = resolveOutputMode(payload.exportOptions);
+  const includeReport = payload.exportOptions.includeOverflowReport;
+
+  // Optional baseline-JPEG background: re-encode the image once so pdf-lib
+  // embeds it directly via DCTDecode (no per-document deflate). Falls back to
+  // the original image if conversion fails, so export never breaks.
+  let renderDesignBytes = designBytes;
+  let renderDesignAsset = payload.designAsset;
+
+  if (payload.exportOptions.backgroundEncoding === "baselineJpeg") {
+    const jpegBytes = await encodeDesignAsBaselineJpeg(designBytes);
+    if (jpegBytes) {
+      renderDesignBytes = jpegBytes;
+      renderDesignAsset = { ...payload.designAsset, kind: "jpeg" };
+    }
+  }
+
   // Render PDFs according to the selected layout mode, then ZIP.
   try {
-    const files: Array<{ filename: string; bytes: Uint8Array }> = [];
-
-    if (payload.exportOptions.layoutMode === "fitMultiplePerPage") {
-      const sheetBytes = await renderCustomDesignPrintSheets({
-        designBytes,
-        designAsset: payload.designAsset,
+    // Default fast path: one combined multi-page PDF for one-per-page exports.
+    // Background + fonts are embedded once for the whole batch. When no report
+    // is requested we can return the bare PDF; otherwise the report CSV forces
+    // a ZIP wrapper since a single PDF cannot carry it.
+    if (
+      payload.exportOptions.layoutMode === "onePerPage" &&
+      outputMode === "combinedPdf"
+    ) {
+      const combinedBytes = await renderCustomDesignCombinedPdf({
+        designBytes: renderDesignBytes,
+        designAsset: renderDesignAsset,
         rows: cappedRows,
         fieldBoxes: payload.fieldBoxes,
         exportOptions: payload.exportOptions,
       });
 
-      files.push({ filename: "custom-print-sheets.pdf", bytes: sheetBytes });
-    } else {
-      const perRowFiles = await Promise.all(
-        cappedRows.map(async (row, index) => {
-          const bytes = await renderCustomDesignPdfForRow({
-            designBytes,
-            designAsset: payload.designAsset,
-            row,
+      if (!includeReport) {
+        return new Response(Buffer.from(combinedBytes), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition":
+              'attachment; filename="batch-pdf-custom-export.pdf"',
+          },
+        });
+      }
+
+      const csv = createPreflightReportCsv({ result: preflight });
+      const zipBytes = await createPdfZip([
+        { filename: "batch-pdf-custom-export.pdf", bytes: combinedBytes },
+        {
+          filename: PREFLIGHT_REPORT_FILENAME,
+          bytes: new TextEncoder().encode(csv),
+        },
+      ]);
+
+      return new Response(Buffer.from(zipBytes), {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition":
+            'attachment; filename="batch-pdf-custom-export.zip"',
+        },
+      });
+    }
+
+    // Separate files: embed the background once into a base document and clone
+    // it per row, then stream each PDF straight into the ZIP so we never hold
+    // every per-row document (nor the whole archive) in memory at once.
+    if (payload.exportOptions.layoutMode === "onePerPage") {
+      const useWorkers =
+        workersEnabled() && cappedRows.length >= WORKER_ROW_THRESHOLD;
+
+      const zipStream = createPdfZipStream(async (append) => {
+        const appendRow = (index: number, bytes: Uint8Array) =>
+          append(
+            makeSafeCustomPdfFilename({
+              index: index + 1,
+              row: cappedRows[index],
+              exportOptions: payload.exportOptions,
+            }),
+            bytes,
+          );
+
+        if (useWorkers) {
+          // Spread rendering across CPU cores; each worker streams PDFs back.
+          await renderSeparateFilesWithWorkers({
+            designBytes: renderDesignBytes,
+            designAsset: renderDesignAsset,
+            fieldBoxes: payload.fieldBoxes,
+            exportOptions: payload.exportOptions,
+            rows: cappedRows,
+            poolSize: getWorkerPoolSize(),
+            onResult: appendRow,
+          });
+        } else {
+          const renderer = await createSeparateFileRenderer({
+            designBytes: renderDesignBytes,
+            designAsset: renderDesignAsset,
             fieldBoxes: payload.fieldBoxes,
             exportOptions: payload.exportOptions,
           });
 
-          return {
-            filename: makeSafeCustomPdfFilename({
-              index: index + 1,
-              row,
-              exportOptions: payload.exportOptions,
-            }),
-            bytes,
-          };
-        }),
-      );
+          // Bound concurrency to cap how many per-row documents exist at once.
+          await mapWithConcurrency(
+            cappedRows,
+            getCustomExportConcurrency(),
+            async (row, index) => {
+              const bytes = await renderer.renderRow(row);
+              appendRow(index, bytes);
+            },
+          );
+        }
 
-      files.push(...perRowFiles);
+        if (includeReport) {
+          const csv = createPreflightReportCsv({ result: preflight });
+          append(PREFLIGHT_REPORT_FILENAME, new TextEncoder().encode(csv));
+        }
+      });
+
+      return new Response(zipStream, {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition":
+            'attachment; filename="batch-pdf-custom-export.zip"',
+        },
+      });
     }
 
-    if (payload.exportOptions.includeOverflowReport) {
+    // Print sheets: a single multi-page PDF, optionally bundled with the report.
+    const sheetBytes = await renderCustomDesignPrintSheets({
+      designBytes: renderDesignBytes,
+      designAsset: renderDesignAsset,
+      rows: cappedRows,
+      fieldBoxes: payload.fieldBoxes,
+      exportOptions: payload.exportOptions,
+    });
+
+    const files: Array<{ filename: string; bytes: Uint8Array }> = [
+      { filename: "custom-print-sheets.pdf", bytes: sheetBytes },
+    ];
+
+    if (includeReport) {
       const csv = createPreflightReportCsv({ result: preflight });
       files.push({
         filename: PREFLIGHT_REPORT_FILENAME,

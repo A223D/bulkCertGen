@@ -6,6 +6,14 @@
 // We detect those cases and re-encode to a baseline RGB JPEG via jpeg-js.
 
 import jpeg from "jpeg-js";
+import { createRequire } from "node:module";
+import type { Sharp } from "sharp";
+
+// sharp is CommonJS; load via require so its callable resolves consistently
+// across the Next bundler and esbuild/vitest (default-import interop is flaky).
+type SharpFactory = (input?: Buffer | Uint8Array) => Sharp;
+const require = createRequire(import.meta.url);
+const sharp = require("sharp") as unknown as SharpFactory;
 
 type JpegInfo = {
   progressive: boolean;
@@ -82,5 +90,31 @@ export function normalizeDesignImageBytes(bytes: Uint8Array): Uint8Array {
     return new Uint8Array(encoded.data);
   } catch {
     return bytes;
+  }
+}
+
+// JPEG quality for the optional baseline-JPEG background path. High enough to
+// keep certificate artwork crisp while still dramatically smaller than PNG.
+const BASELINE_JPEG_QUALITY = 88;
+
+/**
+ * Re-encodes a design image as a baseline (non-progressive) RGB JPEG so pdf-lib
+ * can embed it directly via `embedJpg` (DCTDecode) with no per-row deflate. Any
+ * transparency is flattened over white, since JPEG has no alpha channel.
+ *
+ * Returns the JPEG bytes on success, or `null` if conversion fails so callers
+ * can fall back to the original (lossless) image.
+ */
+export async function encodeDesignAsBaselineJpeg(
+  bytes: Uint8Array,
+): Promise<Uint8Array | null> {
+  try {
+    const out = await sharp(Buffer.from(bytes))
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality: BASELINE_JPEG_QUALITY, progressive: false })
+      .toBuffer();
+    return new Uint8Array(out);
+  } catch {
+    return null;
   }
 }

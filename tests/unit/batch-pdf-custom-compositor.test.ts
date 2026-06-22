@@ -4,6 +4,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import {
+  createSeparateFileRenderer,
+  renderCustomDesignCombinedPdf,
   renderCustomDesignPdfForRow,
   renderCustomDesignPrintSheets,
 } from "../../lib/batch-pdf/custom/compositor.ts";
@@ -361,6 +363,130 @@ describe("renderCustomDesignPrintSheets", () => {
     });
 
     await expect(PDFDocument.load(bytes)).resolves.toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Separate-files renderer (prebuilt background)
+// ---------------------------------------------------------------------------
+
+describe("createSeparateFileRenderer", () => {
+  it("produces one valid single-page PDF per row", async () => {
+    const renderer = await createSeparateFileRenderer({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeImageExportOptions(),
+    });
+
+    const first = await renderer.renderRow({ name: "Alice" });
+    const second = await renderer.renderRow({ name: "Bob" });
+
+    const firstDoc = await PDFDocument.load(first);
+    const secondDoc = await PDFDocument.load(second);
+    expect(firstDoc.getPageCount()).toBe(1);
+    expect(secondDoc.getPageCount()).toBe(1);
+    expect(first.length).toBeGreaterThan(0);
+  });
+
+  it("embeds the background image only once across all rows", async () => {
+    const embedSpy = vi.spyOn(PDFDocument.prototype, "embedPng");
+    try {
+      const renderer = await createSeparateFileRenderer({
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
+        fieldBoxes: [makeCsvBox("name")],
+        exportOptions: makeImageExportOptions(),
+      });
+
+      await renderer.renderRow({ name: "Alice" });
+      await renderer.renderRow({ name: "Bob" });
+      await renderer.renderRow({ name: "Carol" });
+
+      // Once for the base document; cloning via copyPages re-uses the object.
+      expect(embedSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      embedSpy.mockRestore();
+    }
+  });
+
+  it("keeps the background image in each per-row PDF", async () => {
+    const renderer = await createSeparateFileRenderer({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeImageExportOptions(),
+    });
+
+    const bytes = await renderer.renderRow({ name: "Alice" });
+    const pdf = pdfBytesToLatin1(bytes);
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    // The copied page carries the background image XObject.
+    expect(pdf).toContain("/Subtype /Image");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Combined multi-page PDF
+// ---------------------------------------------------------------------------
+
+describe("renderCustomDesignCombinedPdf", () => {
+  it("produces one page per row in a single document", async () => {
+    const bytes = await renderCustomDesignCombinedPdf({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      rows: [{ name: "Alice" }, { name: "Bob" }, { name: "Carol" }],
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeImageExportOptions(),
+    });
+
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBe(3);
+  });
+
+  it("embeds the background image only once for the whole batch", async () => {
+    const embedSpy = vi.spyOn(PDFDocument.prototype, "embedPng");
+    try {
+      await renderCustomDesignCombinedPdf({
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
+        rows: [{ name: "Alice" }, { name: "Bob" }, { name: "Carol" }, { name: "Dan" }],
+        fieldBoxes: [makeCsvBox("name")],
+        exportOptions: makeImageExportOptions(),
+      });
+      expect(embedSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      embedSpy.mockRestore();
+    }
+  });
+
+  it("always produces at least one page even with no rows", async () => {
+    const bytes = await renderCustomDesignCombinedPdf({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      rows: [],
+      fieldBoxes: [makeStaticTextBox()],
+      exportOptions: makeImageExportOptions(),
+    });
+
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBe(1);
+  });
+
+  it("saves with classic objects for broad viewer compatibility", async () => {
+    const bytes = await renderCustomDesignCombinedPdf({
+      designBytes: b64ToBytes(PNG_1X1_B64),
+      designAsset: makePngDesignAsset(),
+      rows: [{ name: "Alice" }, { name: "Bob" }],
+      fieldBoxes: [makeCsvBox("name")],
+      exportOptions: makeImageExportOptions(),
+    });
+
+    const pdf = pdfBytesToLatin1(bytes);
+    expect(pdf.startsWith("%PDF-1.4")).toBe(true);
+    expect(pdf).toContain("\nxref\n");
+    expect(pdf).not.toContain("/Type /ObjStm");
+    expect(pdf).toContain("/Interpolate true");
   });
 });
 

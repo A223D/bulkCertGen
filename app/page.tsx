@@ -82,7 +82,7 @@ export const homepageSteps: Step[] = [
     title: "Choose a template",
     eyebrow: "design",
     description:
-      "Use a starter template or upload a PNG/JPG design with blank spaces for names, dates, roles, or numbers.",
+      "Use one of our ready-made designs or upload your own PNG/JPG image with blank spaces for names, dates, roles, or numbers.",
   },
   {
     title: "Match columns to spaces",
@@ -93,7 +93,7 @@ export const homepageSteps: Step[] = [
   {
     title: "Preview and export",
     eyebrow: "batch.zip",
-    description: "Check real rows, catch long text, then download professional PDFs in one ZIP.",
+    description: "Check real rows, catch long text, then download your personalized PDFs in one file.",
     dark: true,
   },
 ];
@@ -115,12 +115,12 @@ export const homepagePricingPlans: PricingPlan[] = [
     badge: "available now",
     headline: `Up to ${BATCH_PDF_LIMITS.freeExportRows} PDFs`,
     description:
-      "Per batch, generated and exported as a single ZIP. Built for practical school, club, event, and office work.",
+      "Per batch, generated and exported as a single file. Built for practical school, club, event, and office work.",
     features: [
-      "Use a starter template or your own PNG/JPG",
+      "Use one of our designs or your own PNG/JPG",
       "Connect spreadsheet columns to fields",
       "Preview names before export",
-      "Download polished PDFs as a ZIP",
+      "Download polished PDFs as a single file",
     ],
     cta: "Create PDFs",
   },

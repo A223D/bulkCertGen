@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, LockOpen } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -16,15 +16,9 @@ import { CustomPreflightPanel } from "@/components/batch-pdf/custom/CustomPrefli
 import { CustomExportOptionsPanel } from "@/components/batch-pdf/custom/CustomExportOptionsPanel";
 import { useGoogleFonts } from "@/components/batch-pdf/custom/fonts/useGoogleFonts";
 import { cssFontStack } from "@/lib/batch-pdf/custom/fonts/catalog";
-import { TemplatePreviewRenderer } from "@/components/batch-pdf/previews/TemplatePreviewRenderer";
-import {
-  autoMapFields,
-  getMissingValueWarnings,
-  mapRowToTemplateData,
-  validateMapping,
-} from "@/lib/batch-pdf/mapping";
+import { normalizedRectToPoints } from "@/lib/batch-pdf/custom/coordinates";
+import { resolveTextFit } from "@/lib/batch-pdf/custom/text-fit";
 import { clampPreviewRowIndex } from "@/lib/batch-pdf/preview";
-import { getAllTemplates, getTemplateById } from "@/lib/batch-pdf/template-registry";
 import { loadSessionCsv } from "@/lib/batch-pdf/session-csv";
 import {
   createEmptyCustomDesignState,
@@ -46,6 +40,8 @@ import {
 } from "@/lib/batch-pdf/custom/export-options";
 import type { SheetLayoutResult } from "@/lib/batch-pdf/custom/sheet-layout";
 import { BATCH_PDF_LIMITS } from "@/lib/batch-pdf/limits";
+import { getBuiltInDesignByFileName, getBuiltInDesigns } from "@/lib/batch-pdf/built-in-designs";
+import type { BuiltInDesign } from "@/lib/batch-pdf/built-in-designs";
 import type { BatchPdfError, CsvParseResult, CsvRow, FieldMapping } from "@/lib/batch-pdf/types";
 import type { CustomFieldBox, DesignAsset, ExportOptions } from "@/lib/batch-pdf/custom/types";
 import type { CustomDesignPreflightResult } from "@/lib/batch-pdf/custom/preflight";
@@ -59,15 +55,12 @@ type BatchPdfStep =
   | "preview"
   | "export-options"
   | "export";
-type WorkflowMode = "starterTemplate" | "customDesign";
 type ExportStatus = "idle" | "loading" | "success" | "error";
 
 type SessionState = {
   step: BatchPdfStep;
-  workflowMode: WorkflowMode | null;
   csv: CsvParseResult | null;
   csvFileName: string;
-  selectedTemplateId: string | null;
   mapping: FieldMapping;
   previewRowIndex: number;
   customDesign: CustomDesignState;
@@ -76,14 +69,6 @@ type SessionState = {
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-
-const STARTER_STEP_ORDER: BatchPdfStep[] = [
-  "choose-design",
-  "setup-design",
-  "mapping",
-  "preview",
-  "export",
-];
 
 const CUSTOM_STEP_ORDER: BatchPdfStep[] = [
   "choose-design",
@@ -279,7 +264,7 @@ function ExportLoadingAnimation({
         Building your {isPrintSheets ? "print sheets" : "PDFs"}...
       </div>
       <div style={{ fontSize: 13.5, color: "#6E6A61", marginTop: 7, lineHeight: 1.45 }}>
-        Personalizing {freeRows} row{freeRows !== 1 ? "s" : ""}, checking pages, and packing the ZIP.
+        Personalizing {freeRows} row{freeRows !== 1 ? "s" : ""}, checking pages, and packing your files.
       </div>
       <div style={{ ...MONO, fontSize: 11.5, color: "#9A9486", marginTop: 12 }}>
         This takes at least 7 seconds so the download feels steady.
@@ -366,123 +351,6 @@ function filenameFromResponse(res: Response, fallback: string): string {
 
 // ── Thumbnail mini-previews ───────────────────────────────────────────────────
 
-function CertThumbnail() {
-  return (
-    <div style={{ display: "flex", gap: 10 }}>
-      <div
-        style={{
-          width: 74,
-          height: 96,
-          background: "#fff",
-          border: "1px solid #E7E2D6",
-          borderTop: "3px solid #F2B01E",
-          borderRadius: 6,
-          boxShadow: "0 8px 18px -10px rgba(0,0,0,0.25)",
-          padding: "10px 8px",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ ...MONO, fontSize: 4.5, letterSpacing: "0.15em", color: "#A39B8A" }}>
-          CERTIFICATE
-        </div>
-        <div style={{ fontSize: 11, marginTop: 12 }}>Name</div>
-        <div style={{ height: 2, width: 36, background: "#EFEADF", margin: "8px auto 0" }} />
-        <div style={{ height: 2, width: 26, background: "#EFEADF", margin: "5px auto 0" }} />
-      </div>
-    </div>
-  );
-}
-
-function BadgeThumbnail() {
-  return (
-    <div
-      style={{
-        width: 64,
-        height: 96,
-        background: "#1A1916",
-        borderRadius: 6,
-        boxShadow: "0 8px 18px -10px rgba(0,0,0,0.4)",
-        padding: "10px 8px",
-        textAlign: "center",
-      }}
-    >
-      <div
-        style={{ height: 3, width: 26, background: "#F2B01E", borderRadius: 2, margin: "0 auto 10px" }}
-      />
-      <div style={{ color: "#fff", fontSize: 9, fontWeight: 700 }}>Name</div>
-      <div style={{ color: "#B7B1A4", fontSize: 6, marginTop: 3 }}>Role · Company</div>
-    </div>
-  );
-}
-
-function LabelThumbnail() {
-  return (
-    <div
-      style={{
-        width: 88,
-        height: 62,
-        background: "#fff",
-        border: "1px solid #E7E2D6",
-        borderRadius: 5,
-        boxShadow: "0 4px 10px -5px rgba(0,0,0,0.2)",
-        padding: "8px 10px",
-      }}
-    >
-      <div style={{ height: 7, width: 50, background: "#1A1916", borderRadius: 2, marginBottom: 5 }} />
-      <div style={{ height: 4.5, width: 68, background: "#E7E2D6", borderRadius: 2, marginBottom: 4 }} />
-      <div style={{ height: 4.5, width: 50, background: "#E7E2D6", borderRadius: 2 }} />
-    </div>
-  );
-}
-
-function ApptThumbnail() {
-  return (
-    <div
-      style={{
-        width: 88,
-        height: 56,
-        background: "#1A1916",
-        borderRadius: 6,
-        boxShadow: "0 4px 10px -5px rgba(0,0,0,0.3)",
-        padding: "7px 9px",
-      }}
-    >
-      <div style={{ fontSize: 5.5, fontWeight: 700, color: "#F2B01E", letterSpacing: "0.1em" }}>
-        APPOINTMENT
-      </div>
-      <div style={{ fontSize: 8, fontWeight: 700, color: "#fff", marginTop: 5 }}>Name</div>
-      <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
-        <div style={{ height: 4.5, width: 30, background: "#F2B01E", borderRadius: 2 }} />
-        <div style={{ height: 4.5, width: 18, background: "#4A463E", borderRadius: 2 }} />
-      </div>
-    </div>
-  );
-}
-
-function templateThumb(id: string) {
-  if (id === "classic-certificate") return <CertThumbnail />;
-  if (id === "name-badge") return <BadgeThumbnail />;
-  if (id === "mailing-label") return <LabelThumbnail />;
-  if (id === "appointment-card") return <ApptThumbnail />;
-  return (
-    <div
-      style={{
-        width: 74,
-        height: 80,
-        background: "#F4F1E9",
-        borderRadius: 6,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#9A9486",
-        fontSize: 11,
-      }}
-    >
-      Preview
-    </div>
-  );
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -514,6 +382,15 @@ function getFinishedSizePresetId(options: ExportOptions): FinishedSizePreset["id
 }
 
 function getRecommendedFinishedSize(asset: DesignAsset): Pick<ExportOptions, "customItemWidth" | "customItemHeight" | "unit"> {
+  const builtIn = getBuiltInDesignByFileName(asset.fileName);
+  if (builtIn) {
+    return {
+      customItemWidth: builtIn.finishedWidthIn,
+      customItemHeight: builtIn.finishedHeightIn,
+      unit: "in",
+    };
+  }
+
   const ratio = asset.intrinsicWidth / asset.intrinsicHeight;
 
   if (ratio > 1.2 && ratio < 1.4 && Math.max(asset.intrinsicWidth, asset.intrinsicHeight) < 1000) {
@@ -608,10 +485,9 @@ function aspectRatiosDiffer(
 }
 
 function getBoxText(box: CustomFieldBox, row: CsvRow): string {
-  const rawValue =
-    box.source.type === "csvColumn" ? row[box.source.column] : box.source.value;
-  const text = rawValue?.trim() ? rawValue : box.label || "Text";
-  return box.style.uppercase ? text.toUpperCase() : text;
+  return box.source.type === "csvColumn"
+    ? (row[box.source.column] ?? "")
+    : box.source.value;
 }
 
 function cssFontFamily(fontFamily: CustomFieldBox["style"]["fontFamily"]): string {
@@ -625,6 +501,7 @@ function CustomDesignReviewPreview({
   row,
   rowIndex,
   rowCount,
+  exportOptions,
   onPrevious,
   onNext,
 }: {
@@ -634,11 +511,20 @@ function CustomDesignReviewPreview({
   row: CsvRow;
   rowIndex: number;
   rowCount: number;
+  exportOptions: ExportOptions;
   onPrevious: () => void;
   onNext: () => void;
 }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const aspectRatio = asset.intrinsicWidth / asset.intrinsicHeight;
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  const [previewWidth, setPreviewWidth] = useState(0);
+  const itemSize = resolveExportItemSizePoints({
+    exportOptions,
+    designAsset: asset,
+  });
+  const itemWidthPt = itemSize.ok ? itemSize.value.widthPt : asset.intrinsicWidth;
+  const itemHeightPt = itemSize.ok ? itemSize.value.heightPt : asset.intrinsicHeight;
+  const aspectRatio = itemWidthPt / itemHeightPt;
   const previewWidthByViewportHeight = `min(760px, 100%, max(300px, calc(${(aspectRatio * 100).toFixed(3)}vh - ${(aspectRatio * 19).toFixed(3)}rem)))`;
 
   useEffect(() => {
@@ -649,6 +535,27 @@ function CustomDesignReviewPreview({
     setImageUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
+
+  useLayoutEffect(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+
+    const updateWidth = () => {
+      const width = preview.getBoundingClientRect().width;
+      if (width > 0) {
+        setPreviewWidth((current) => (current === width ? current : width));
+      }
+    };
+
+    updateWidth();
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(preview);
+    return () => observer.disconnect();
+  }, [aspectRatio]);
+
+  const pointToPixelScale = previewWidth > 0 ? previewWidth / itemWidthPt : 0;
 
   return (
     <section style={{ background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 20, padding: 18, boxShadow: "0 24px 50px -34px rgba(26,25,22,0.3)" }}>
@@ -666,6 +573,7 @@ function CustomDesignReviewPreview({
 
       <div style={{ background: "#F4F1E9", border: "1px solid #EFEADF", borderRadius: 14, padding: 14 }}>
         <div
+          ref={previewRef}
           style={{
             position: "relative",
             width: previewWidthByViewportHeight,
@@ -673,19 +581,30 @@ function CustomDesignReviewPreview({
             overflow: "hidden",
             borderRadius: 8,
             background: "#fff",
-            aspectRatio: `${asset.intrinsicWidth} / ${asset.intrinsicHeight}`,
+            aspectRatio: `${itemWidthPt} / ${itemHeightPt}`,
             boxShadow: "0 14px 34px -26px rgba(26,25,22,0.5)",
           }}
         >
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt="" draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
+            <img src={imageUrl} alt="" draggable={false} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "fill" }} />
           ) : (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#8A857A", fontSize: 13 }}>Loading preview…</div>
           )}
 
           {boxes.map((box) => {
             const text = getBoxText(box, row);
+            const physicalRect = normalizedRectToPoints({
+              rect: box.rect,
+              pageWidthPt: itemWidthPt,
+              pageHeightPt: itemHeightPt,
+            });
+            const fit = resolveTextFit({
+              text,
+              box: { widthPt: physicalRect.width, heightPt: physicalRect.height },
+              style: box.style,
+            });
+            const isWrapped = box.style.overflowMode === "wrap" && fit.lineCount > 1;
             return (
               <div
                 key={box.id}
@@ -709,19 +628,26 @@ function CustomDesignReviewPreview({
                         ? "center"
                         : "flex-start",
                   overflow: "hidden",
-                  padding: 2,
                   color: box.style.color,
                   fontFamily: cssFontFamily(box.style.fontFamily),
                   fontWeight: box.style.fontWeight === "bold" ? 700 : 400,
-                  fontSize: "clamp(10px, 1.6vw, 24px)",
+                  fontSize: `${fit.fontSize * pointToPixelScale}px`,
                   lineHeight: box.style.lineHeight,
                   textAlign: box.style.align,
                   outline: "1px dashed rgba(242,176,30,0.65)",
                   background: "rgba(255,255,255,0.24)",
+                  visibility: pointToPixelScale > 0 ? "visible" : "hidden",
                 }}
               >
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: box.style.overflowMode === "wrap" ? "normal" : "nowrap" }}>
-                  {text}
+                <span
+                  style={{
+                    display: "block",
+                    maxWidth: "100%",
+                    overflow: "hidden",
+                    whiteSpace: isWrapped ? "pre" : "nowrap",
+                  }}
+                >
+                  {fit.renderedText}
                 </span>
               </div>
             );
@@ -881,24 +807,22 @@ export function BatchPdfClient() {
 
   const [session, setSession] = useState<SessionState>({
     step: "choose-design",
-    workflowMode: null,
     csv: null,
     csvFileName: "",
-    selectedTemplateId: null,
     mapping: {},
     previewRowIndex: 0,
     customDesign: createEmptyCustomDesignState(),
     customExportOptions: createDefaultExportOptions(),
     customPreflightResult: null,
   });
-  const [starterExportStatus, setStarterExportStatus] = useState<ExportStatus>("idle");
-  const [starterExportError, setStarterExportError] = useState<string | null>(null);
   const [customExportStatus, setCustomExportStatus] = useState<ExportStatus>("idle");
   const [customExportError, setCustomExportError] = useState<string | null>(null);
   const [showCustomSizeInputs, setShowCustomSizeInputs] = useState(false);
   // Keep the finished size proportional to the uploaded design by default so a
   // stretched/distorted print can't happen without an explicit opt-out.
   const [lockAspectRatio, setLockAspectRatio] = useState(true);
+  const [loadingBuiltInDesignId, setLoadingBuiltInDesignId] = useState<string | null>(null);
+  const [builtInDesignError, setBuiltInDesignError] = useState<string | null>(null);
 
   // Load CSV from sessionStorage on mount; redirect if missing
   useEffect(() => {
@@ -909,33 +833,17 @@ export function BatchPdfClient() {
     }
     // Syncing the one-time sessionStorage handoff into local state on mount is a
     // legitimate external-store read; this is the intended use of an effect.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSession((s) => ({ ...s, csv: stored.asCsvResult(), csvFileName: stored.fileName }));
   }, [router]);
 
   // ── Computed ───────────────────────────────────────────────────────────────
 
-  const selectedTemplate = getTemplateById(session.selectedTemplateId ?? "");
-  const isStarterMode = session.workflowMode === "starterTemplate";
-  const isCustomMode = session.workflowMode === "customDesign";
   const customDesignReady = isCustomDesignPreviewReady(session.customDesign);
-  const allTemplates = getAllTemplates();
   const csvRowCount = session.csv?.rowCount ?? 0;
   const freeRows = Math.min(csvRowCount, BATCH_PDF_LIMITS.freeExportRows);
 
-  const mappingValidation =
-    isStarterMode && selectedTemplate && session.csv
-      ? validateMapping(selectedTemplate, session.csv.headers, session.mapping)
-      : null;
-  const mappingErrors = mappingValidation && !mappingValidation.ok ? mappingValidation.errors : [];
-  const missingValueWarnings =
-    selectedTemplate && session.csv
-      ? getMissingValueWarnings(session.csv.rows, session.mapping, selectedTemplate)
-      : [];
-  const isMappingValid = Boolean(mappingValidation?.ok);
-
   const isCustomFieldReady =
-    isCustomMode && session.csv
+    session.csv
       ? isCustomFieldPlacementReady({
           boxes: session.customDesign.fieldBoxes,
           csvHeaders: session.csv.headers,
@@ -1001,7 +909,7 @@ export function BatchPdfClient() {
   }
 
   function buildSteps(): WizardStep[] {
-    const stepOrder = isCustomMode ? CUSTOM_STEP_ORDER : STARTER_STEP_ORDER;
+    const stepOrder = CUSTOM_STEP_ORDER;
     const currentIdx = Math.max(0, stepOrder.indexOf(session.step));
     return [
       { n: 1, label: "Upload CSV", state: "complete", onClick: () => router.push("/") },
@@ -1016,46 +924,8 @@ export function BatchPdfClient() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  function handleChooseWorkflow(mode: WorkflowMode) {
-    setStarterExportStatus("idle");
-    setStarterExportError(null);
-    setCustomExportStatus("idle");
-    setCustomExportError(null);
-    setShowCustomSizeInputs(false);
-    setSession((s) => ({
-      ...s,
-      step: "setup-design",
-      workflowMode: mode,
-      selectedTemplateId: mode === "starterTemplate" ? s.selectedTemplateId : null,
-      mapping: mode === "starterTemplate" ? s.mapping : {},
-      previewRowIndex: 0,
-      customDesign: resetCustomDesignState(),
-      customExportOptions: createDefaultExportOptions(),
-      customPreflightResult: null,
-    }));
-  }
-
-  function handleSelectTemplate(templateId: string) {
-    const template = getTemplateById(templateId);
-    if (!template || !session.csv) return;
-    setSession((s) => ({
-      ...s,
-      selectedTemplateId: templateId,
-      mapping: autoMapFields(template, s.csv?.headers ?? []),
-    }));
-  }
-
   function handleContinueFromSetupDesign() {
     setSession((s) => ({ ...s, step: "mapping" }));
-  }
-
-  function handleMappingChange(fieldKey: string, csvHeader: string) {
-    setSession((s) => {
-      const next = { ...s.mapping };
-      if (csvHeader === "") delete next[fieldKey];
-      else next[fieldKey] = csvHeader;
-      return { ...s, mapping: next };
-    });
   }
 
   function handleContinueToPreview() {
@@ -1081,10 +951,7 @@ export function BatchPdfClient() {
   }
 
   function handleContinueToExport() {
-    setSession((s) => ({
-      ...s,
-      step: s.workflowMode === "customDesign" ? "export-options" : "export",
-    }));
+    setSession((s) => ({ ...s, step: "export-options" }));
   }
 
   function handleContinueToFinalExport() {
@@ -1135,6 +1002,73 @@ export function BatchPdfClient() {
       };
     });
   }, []);
+
+  const handleStartUploadOwn = useCallback(() => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
+    setShowCustomSizeInputs(false);
+    setSession((s) => {
+      if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
+      return {
+        ...s,
+        step: "setup-design",
+        mapping: {},
+        previewRowIndex: 0,
+        customDesign: resetCustomDesignState(),
+        customExportOptions: createDefaultExportOptions(),
+        customPreflightResult: null,
+      };
+    });
+  }, []);
+
+  const handleReplaceDesign = useCallback(() => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
+    setShowCustomSizeInputs(false);
+    setSession((s) => {
+      if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
+      return {
+        ...s,
+        step: "choose-design",
+        mapping: {},
+        customDesign: resetCustomDesignState(),
+        customExportOptions: createDefaultExportOptions(),
+        customPreflightResult: null,
+      };
+    });
+  }, []);
+
+  async function loadBuiltInDesign(design: BuiltInDesign) {
+    setLoadingBuiltInDesignId(design.id);
+    setBuiltInDesignError(null);
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
+    setShowCustomSizeInputs(false);
+
+    try {
+      const response = await fetch(design.publicPath);
+      if (!response.ok) throw new Error("asset_fetch_failed");
+      const blob = await response.blob();
+      const file = new File([blob], design.fileName, { type: "image/png" });
+
+      setSession((s) => {
+        if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
+        return {
+          ...s,
+          step: "setup-design",
+          mapping: {},
+          previewRowIndex: 0,
+          customDesign: { ...resetCustomDesignState(), file, previewStatus: "loading" },
+          customExportOptions: createDefaultExportOptions(),
+          customPreflightResult: null,
+        };
+      });
+    } catch {
+      setBuiltInDesignError("That design could not be loaded. Try another design.");
+    } finally {
+      setLoadingBuiltInDesignId(null);
+    }
+  }
 
   const handleCustomDesignAssetReady = useCallback((asset: DesignAsset) => {
     setSession((s) => {
@@ -1289,46 +1223,6 @@ export function BatchPdfClient() {
     [],
   );
 
-  async function handleStarterExport() {
-    if (!session.csv || !session.selectedTemplateId) return;
-    const exportStartedAt = Date.now();
-    setStarterExportStatus("loading");
-    setStarterExportError(null);
-    try {
-      const res = await fetch("/api/generate-pdf", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          templateId: session.selectedTemplateId,
-          rows: session.csv.rows,
-          mapping: session.mapping,
-          mode: "free",
-        }),
-      });
-      if (!res.ok) {
-        await waitForMinimumExportLoading(exportStartedAt);
-        setStarterExportStatus("error");
-        setStarterExportError("Export failed. Check your mapping and try again.");
-        return;
-      }
-      const blob = await res.blob();
-      await waitForMinimumExportLoading(exportStartedAt);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "batch-pdf-free-export.zip";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      setStarterExportStatus("success");
-    } catch {
-      await waitForMinimumExportLoading(exportStartedAt);
-      setStarterExportStatus("error");
-      setStarterExportError("Could not reach the export service. Check your connection.");
-    }
-  }
-
   async function handleCustomExport() {
     const { customDesign, csv, customExportOptions } = session;
     if (!csv || !customDesign.asset || !customDesign.file) return;
@@ -1382,189 +1276,239 @@ export function BatchPdfClient() {
 
   // ── Step renders ───────────────────────────────────────────────────────────
 
-  const renderChooseDesign = () => (
-    <div>
-      <div style={{ textAlign: "center", maxWidth: 560, margin: "0 auto 30px" }}>
-        <div style={STEP_LABEL_STYLE}>Step 2 · Choose design</div>
-        <h2 style={{ ...H2, fontSize: 34 }}>How do you want to design it?</h2>
-        <p style={{ fontSize: 16, color: "#57534A", lineHeight: 1.5 }}>
-          Both paths end the same way — a ZIP of personalized PDFs from your{" "}
-          <strong style={{ color: "#1A1916" }}>{csvRowCount} rows</strong>. Pick the one that
-          fits what you have.
-        </p>
-        <HelpfulTip style={{ marginTop: 16, textAlign: "left" }}>
-          If you need something quickly, start with a template. If you already have artwork from Canva, a school brand kit, or an event flyer, upload your own design.
-        </HelpfulTip>
-      </div>
+  const renderChooseDesign = () => {
+    const allDesigns = getBuiltInDesigns();
+    const categoryLabels: Record<BuiltInDesign["category"], string> = {
+      certificate: "Certificate",
+      nameBadge: "Name Badge",
+      mailingLabel: "Mailing Label",
+      appointmentCard: "Appointment Card",
+    };
 
-      <div
-        data-rcol
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, maxWidth: 880, margin: "0 auto" }}
-      >
-        {/* Starter template */}
-        <div
-          className="vs-choice-card"
-          onClick={() => handleChooseWorkflow("starterTemplate")}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === "Enter" && handleChooseWorkflow("starterTemplate")}
-          style={{ background: "#FFFFFF", border: "1.5px solid #E7E2D6", borderRadius: 20, padding: 26, cursor: "pointer", transition: "border-color .15s, box-shadow .15s, transform .15s" }}
-        >
-          <div style={{ height: 128, borderRadius: 14, background: "#FCFBF7", border: "1px solid #EFEADF", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
-            <div style={{ display: "flex", gap: 10 }}>
-              <div style={{ width: 74, height: 96, background: "#fff", border: "1px solid #E7E2D6", borderTop: "3px solid #F2B01E", borderRadius: 6, boxShadow: "0 8px 18px -10px rgba(0,0,0,0.25)", padding: "12px 9px", textAlign: "center" }}>
-                <div style={{ ...MONO, fontSize: 4.5, letterSpacing: "0.15em", color: "#A39B8A" }}>CERTIFICATE</div>
-                <div style={{ fontSize: 11, marginTop: 12 }}>Name</div>
-                <div style={{ height: 2, width: 36, background: "#EFEADF", margin: "8px auto 0" }} />
-                <div style={{ height: 2, width: 26, background: "#EFEADF", margin: "5px auto 0" }} />
-              </div>
-              <div style={{ width: 54, height: 96, background: "#1A1916", borderRadius: 6, boxShadow: "0 8px 18px -10px rgba(0,0,0,0.4)", padding: "10px 7px", textAlign: "center" }}>
-                <div style={{ height: 3, width: 24, background: "#F2B01E", borderRadius: 2, margin: "0 auto 12px" }} />
-                <div style={{ color: "#fff", fontSize: 9, fontWeight: 700 }}>L. Chen</div>
-                <div style={{ color: "#B7B1A4", fontSize: 6, marginTop: 3 }}>SPEAKER</div>
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#8A6A12", background: "#FBEFCB", padding: "3px 8px", borderRadius: 6 }}>A</span>
-            <h3 style={{ fontSize: 19, fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>Use a starter template</h3>
-          </div>
-          <p style={{ fontSize: 14, color: "#6E6A61", lineHeight: 1.5, margin: "10px 0 16px" }}>
-            Choose from built-in certificates, badges, labels, and cards. Fastest if you don&apos;t have your own design.
-          </p>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: "#1A1916" }}>
-            Browse templates <span>→</span>
-          </span>
-        </div>
-
-        {/* Custom design */}
-        <div
-          className="vs-choice-card"
-          onClick={() => handleChooseWorkflow("customDesign")}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === "Enter" && handleChooseWorkflow("customDesign")}
-          style={{ background: "#FFFFFF", border: "1.5px solid #E7E2D6", borderRadius: 20, padding: 26, cursor: "pointer", transition: "border-color .15s, box-shadow .15s, transform .15s" }}
-        >
-          <div style={{ height: 128, borderRadius: 14, background: "#FCFBF7", border: "1px solid #EFEADF", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
-            <div style={{ width: 130, height: 90, background: "#fff", border: "1px solid #E7E2D6", borderRadius: 7, boxShadow: "0 8px 18px -10px rgba(0,0,0,0.22)", position: "relative" }}>
-              <div style={{ position: "absolute", left: 14, top: 18, width: 62, height: 16, border: "1.5px dashed #F2B01E", borderRadius: 4 }} />
-              <div style={{ position: "absolute", left: 14, top: 42, width: 42, height: 11, border: "1.5px dashed #C9C1B0", borderRadius: 4 }} />
-              <div style={{ position: "absolute", right: 12, bottom: 12, width: 34, height: 34, background: "#FBEFCB", borderRadius: 5 }} />
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#8A6A12", background: "#FBEFCB", padding: "3px 8px", borderRadius: 6 }}>B</span>
-            <h3 style={{ fontSize: 19, fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>Upload my own design</h3>
-          </div>
-          <p style={{ fontSize: 14, color: "#6E6A61", lineHeight: 1.5, margin: "10px 0 16px" }}>
-            Use your own PNG or JPEG image and place CSV fields on top of it exactly where you want them.
-          </p>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: "#1A1916" }}>
-            Upload a design <span>→</span>
-          </span>
-        </div>
-      </div>
-
-      <div style={{ textAlign: "center", marginTop: 24 }}>
-        <Button type="button" variant="ghost" size="sm" onClick={() => router.push("/")}>
-          ← Back to CSV upload
-        </Button>
-      </div>
-    </div>
-  );
-
-  const renderStep3a = () => {
-    const reqCount = selectedTemplate ? selectedTemplate.fields.filter((f) => f.required).length : 0;
     return (
-      <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 34, alignItems: "start" }}>
-        <div>
-          <div style={STEP_LABEL_STYLE}>Step 3 · Set up design</div>
-          <h2 style={H2}>Pick a starter template</h2>
-          <p style={SUBTEXT}>Each template already has its fields laid out. You&apos;ll connect them to your CSV columns next.</p>
-          <HelpfulTip style={{ marginBottom: 16 }}>
-            Pick the closest template, not the perfect one. You will preview real rows before anything is generated.
-          </HelpfulTip>
-          <div data-rcol4 style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            {allTemplates.map((t) => {
-              const sel = t.id === session.selectedTemplateId;
-              return (
-                <div
-                  key={t.id}
-                  className="vs-tpl-card"
-                  onClick={() => handleSelectTemplate(t.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === "Enter" && handleSelectTemplate(t.id)}
-                  style={{ background: "#FFFFFF", border: `1.5px solid ${sel ? "#F2B01E" : "#E7E2D6"}`, borderRadius: 16, padding: 18, cursor: "pointer", transition: "border-color .15s, box-shadow .15s", boxShadow: sel ? "0 8px 20px -10px rgba(242,176,30,0.3)" : "none" }}
+      <div>
+        <div style={{ textAlign: "center", maxWidth: 620, margin: "0 auto 30px" }}>
+          <div style={STEP_LABEL_STYLE}>Step 2 · Choose design</div>
+          <h2 style={{ ...H2, fontSize: 34 }}>Choose a design</h2>
+          <p style={{ fontSize: 16, color: "#57534A", lineHeight: 1.5 }}>
+            Use your own PNG or JPEG design, or start from one of our ready-made backgrounds.{" "}
+            Either way you&apos;ll place your fields and control exactly how the text looks.
+          </p>
+        </div>
+
+        {/* Upload Your Own — prominent, full-width */}
+        <div
+          className="vs-choice-card"
+          onClick={handleStartUploadOwn}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && handleStartUploadOwn()}
+          style={{
+            background: "#FFFFFF",
+            border: "2px solid #F2B01E",
+            borderRadius: 20,
+            padding: 28,
+            cursor: "pointer",
+            transition: "border-color .15s, box-shadow .15s, transform .15s",
+            maxWidth: 880,
+            margin: "0 auto 28px",
+            boxShadow: "0 8px 32px -14px rgba(242,176,30,0.28)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 18 }}>
+            <span
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: "linear-gradient(135deg, #F2B01E, #D99A10)",
+                color: "#1A1916",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 22,
+                flexShrink: 0,
+              }}
+            >
+              ↑
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <h3 style={{ fontSize: 20, fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>
+                  Upload your own design
+                </h3>
+                <span
+                  style={{
+                    ...MONO,
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: "#1A1916",
+                    background: "#F2B01E",
+                    padding: "3px 8px",
+                    borderRadius: 6,
+                  }}
                 >
-                  <div style={{ height: 120, borderRadius: 12, background: "#FCFBF7", border: "1px solid #EFEADF", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-                    {templateThumb(t.id)}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <h3 style={{ fontSize: 16.5, fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>{t.name}</h3>
-                    {sel && (
-                      <span style={{ width: 22, height: 22, borderRadius: 6, background: "#F2B01E", color: "#1A1916", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>✓</span>
-                    )}
-                  </div>
-                  <p style={{ fontSize: 13, color: "#8A857A", margin: "5px 0 12px" }}>{t.description}</p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {t.recommendedFor.slice(0, 3).map((tag) => (
-                      <span key={tag} style={{ ...MONO, fontSize: 10.5, fontWeight: 600, color: "#6E6A61", background: "#F4F1E9", padding: "3px 7px", borderRadius: 6 }}>{tag}</span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+                  Recommended
+                </span>
+              </div>
+              <p style={{ fontSize: 14, color: "#6E6A61", lineHeight: 1.5, margin: "8px 0 0" }}>
+                Already have artwork from Canva, a brand kit, or an event flyer? Upload your own PNG
+                or JPEG and place your CSV fields exactly where you want them.
+              </p>
+            </div>
           </div>
         </div>
 
-        <aside data-raside style={{ position: "sticky", top: 130, background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 18, padding: 20 }}>
-          <div style={{ ...MONO, fontSize: 12, fontWeight: 600, letterSpacing: "0.08em", color: "#9A9486", textTransform: "uppercase" }}>Selected</div>
-          <div style={{ fontSize: 18, fontWeight: 800, margin: "7px 0 3px" }}>{selectedTemplate?.name ?? "—"}</div>
-          <div style={{ fontSize: 13, color: "#8A857A" }}>{selectedTemplate?.description ?? "Choose a template from the left"}</div>
-          <div style={{ height: 1, background: "#F0EDE4", margin: "16px 0" }} />
-          {selectedTemplate ? (
-            <div style={{ fontSize: 13, color: "#6E6A61", lineHeight: 1.5 }}>
-              This template needs <strong style={{ color: "#1A1916" }}>{reqCount} required</strong> field{reqCount !== 1 ? "s" : ""}. We&apos;ll auto-connect any CSV columns that match.
-            </div>
-          ) : (
-            <div style={{ fontSize: 13, color: "#9A9486", lineHeight: 1.5 }}>Select a template to see its details and continue.</div>
-          )}
-          <HelpfulTip style={{ marginTop: 14 }}>
-            Short names like Name, Award, Date, and Role make the next step easier to check.
-          </HelpfulTip>
-          <Button
-            type="button"
-            variant="primary"
-            fullWidth
-            disabled={!selectedTemplate}
-            onClick={handleContinueFromSetupDesign}
-            className="mt-4.5"
+        <div style={{ textAlign: "center", maxWidth: 880, margin: "0 auto 24px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              color: "#8A857A",
+            }}
           >
-            Continue — map fields →
+            <span style={{ flex: 1, height: 1, background: "#E7E2D6" }} />
+            <span style={{ ...MONO, fontSize: 12, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              Or start with one of our designs
+            </span>
+            <span style={{ flex: 1, height: 1, background: "#E7E2D6" }} />
+          </div>
+        </div>
+
+        {builtInDesignError && (
+          <div style={{ maxWidth: 880, margin: "0 auto 14px", border: "1px solid #F2C9BD", background: "#FBEEEA", borderRadius: 12, padding: "11px 14px", color: "#7A2E1A", fontSize: 13, textAlign: "center" }}>
+            {builtInDesignError}
+          </div>
+        )}
+
+        <div
+          data-rcol4
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+            gap: 14,
+            maxWidth: 880,
+            margin: "0 auto",
+          }}
+        >
+          {allDesigns.map((design) => {
+            const isLoading = loadingBuiltInDesignId === design.id;
+            return (
+              <div
+                key={design.id}
+                className="vs-tpl-card"
+                onClick={() => !isLoading && loadBuiltInDesign(design)}
+                role="button"
+                tabIndex={isLoading ? -1 : 0}
+                onKeyDown={(e) =>
+                  !isLoading && (e.key === "Enter" || e.key === " ") && loadBuiltInDesign(design)
+                }
+                style={{
+                  background: "#FFFFFF",
+                  border: "1.5px solid #E7E2D6",
+                  borderRadius: 16,
+                  padding: 16,
+                  cursor: isLoading ? "default" : "pointer",
+                  transition: "border-color .15s, box-shadow .15s",
+                  opacity: isLoading ? 0.6 : 1,
+                }}
+              >
+                <div
+                  style={{
+                    height: 120,
+                    borderRadius: 12,
+                    background: "#FCFBF7",
+                    border: "1px solid #EFEADF",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 12,
+                    overflow: "hidden",
+                  }}
+                >
+                  {isLoading ? (
+                    <span style={{ color: "#9A9486", fontSize: 13 }}>Loading…</span>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={design.publicPath}
+                      alt={design.name}
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                      draggable={false}
+                    />
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                  <span
+                    style={{
+                      ...MONO,
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      color: "#6E6A61",
+                      background: "#F4F1E9",
+                      padding: "2px 7px",
+                      borderRadius: 5,
+                    }}
+                  >
+                    {categoryLabels[design.category]}
+                  </span>
+                  <span
+                    style={{
+                      ...MONO,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: design.variant === "classic" ? "#6E6A61" : "#8A6A12",
+                      background: design.variant === "classic" ? "#F4F1E9" : "#FBEFCB",
+                      padding: "2px 7px",
+                      borderRadius: 5,
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {design.variant}
+                  </span>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>
+                  {design.name}
+                </div>
+                <div style={{ fontSize: 11.5, color: "#8A857A", marginBottom: 2 }}>
+                  {design.finishedWidthIn} × {design.finishedHeightIn} in
+                </div>
+                <div style={{ fontSize: 12, color: "#6E6A61", lineHeight: 1.4 }}>
+                  {design.description}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ textAlign: "center", marginTop: 24 }}>
+          <Button type="button" variant="ghost" size="sm" onClick={() => router.push("/")}>
+            ← Back to CSV upload
           </Button>
-          <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep("choose-design")} className="mt-2">
-            ← Choose a different source
-          </Button>
-        </aside>
+        </div>
       </div>
     );
   };
 
   const renderStep3b = () => {
     const { customDesign } = session;
+    const hasFile = Boolean(customDesign.file);
     return (
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <div style={{ textAlign: "center" }}>
-          <div style={STEP_LABEL_STYLE}>Step 3 · Upload design</div>
-          <h2 style={H2}>Upload your design</h2>
+          <div style={STEP_LABEL_STYLE}>Step 3 · {hasFile ? "Confirm design" : "Upload design"}</div>
+          <h2 style={H2}>{hasFile ? "Confirm your design" : "Upload your design"}</h2>
           <p style={{ ...SUBTEXT, maxWidth: 520, margin: "0 auto 24px" }}>
-            Upload a PNG or JPEG image. You&apos;ll place your CSV fields on top of it in the next step.
+            {hasFile
+              ? "Your design is loaded. Preview it below, then continue to place your fields."
+              : "Upload a PNG or JPEG image. You'll place your CSV fields on top of it in the next step."}
           </p>
-          <HelpfulTip style={{ maxWidth: 560, margin: "0 auto 20px", textAlign: "left" }}>
-            Designs work best when they already have clear blank spaces for names, dates, roles, or table numbers.
-          </HelpfulTip>
+          {!hasFile && (
+            <HelpfulTip style={{ maxWidth: 560, margin: "0 auto 20px", textAlign: "left" }}>
+              Designs work best when they already have clear blank spaces for names, dates, roles, or table numbers.
+            </HelpfulTip>
+          )}
         </div>
 
         <div style={{ display: customDesignReady ? "none" : "block" }}>
@@ -1627,7 +1571,7 @@ export function BatchPdfClient() {
               <Button type="button" variant="primary" size="lg" onClick={handleContinueFromSetupDesign} className="flex-1">
                 Place fields →
               </Button>
-              <Button type="button" variant="secondary" size="lg" onClick={handleCustomDesignReset} className="shrink-0">
+              <Button type="button" variant="secondary" size="lg" onClick={handleReplaceDesign} className="shrink-0">
                 Replace design
               </Button>
             </div>
@@ -1636,96 +1580,8 @@ export function BatchPdfClient() {
 
         <div style={{ textAlign: "center", marginTop: 20 }}>
           <Button type="button" variant="ghost" size="sm" onClick={() => goToStep("choose-design")}>
-            ← Choose a different source
+            ← Choose a different design
           </Button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderStep4a = () => {
-    if (!selectedTemplate || !session.csv) return null;
-    const sampleRow = session.csv.rows[0] ?? {};
-
-    return (
-      <div>
-        <div style={STEP_LABEL_STYLE}>Step 4 · Map fields</div>
-        <h2 style={H2}>Connect template fields to your columns</h2>
-        <p style={{ ...SUBTEXT, maxWidth: 620 }}>
-          We already matched the ones we recognized. Required fields must be connected before you can preview.
-        </p>
-        <HelpfulTip style={{ maxWidth: 680, marginBottom: 16 }}>
-          Match by meaning, not exact spelling. A template field called Recipient can use a spreadsheet column called Student Name.
-        </HelpfulTip>
-
-        <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 24, alignItems: "start" }}>
-          <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 18, padding: "8px 8px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 18px 1fr", gap: 6, padding: "12px 16px 8px", ...MONO, fontSize: 10.5, fontWeight: 600, letterSpacing: "0.06em", color: "#9A9486", textTransform: "uppercase" }}>
-              <span>Template field</span><span /><span>Your CSV column</span>
-            </div>
-            {selectedTemplate.fields.map((field, i) => {
-              const hasErr = mappingErrors.some((e) => e.fieldKey === field.key);
-              const hasWarn = missingValueWarnings.some((w) => w.fieldKey === field.key);
-              const warnMsg = missingValueWarnings.find((w) => w.fieldKey === field.key)?.message;
-              const errMsg = mappingErrors.find((e) => e.fieldKey === field.key)?.message;
-              return (
-                <div key={field.key} style={{ display: "grid", gridTemplateColumns: "1fr 18px 1fr", gap: 6, padding: "14px 16px", borderBottom: i < selectedTemplate.fields.length - 1 ? "1px solid #F4F1E9" : "none", alignItems: "start" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 14.5, fontWeight: 700 }}>{field.label}</span>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 6, background: field.required ? "#FBEEEA" : "#F4F1E9", color: field.required ? "#B5482E" : "#8A857A" }}>
-                        {field.required ? "Required" : "Optional"}
-                      </span>
-                    </div>
-                    <div style={{ ...MONO, fontSize: 11, color: "#9A9486", marginTop: 3 }}>{field.aliases.slice(0, 3).join(", ")}</div>
-                    {hasWarn && warnMsg && <div style={{ fontSize: 11.5, color: "#8A6A12", marginTop: 4, background: "#FBEFCB", padding: "3px 7px", borderRadius: 6, display: "inline-block" }}>{warnMsg}</div>}
-                    {hasErr && errMsg && <div style={{ fontSize: 11.5, color: "#B5482E", marginTop: 4 }}>{errMsg}</div>}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "#CFC8B8", paddingTop: 6 }}>→</div>
-                  <div>
-                    <Select
-                      aria-label={`Map ${field.label}`}
-                      value={session.mapping[field.key] || UNMAPPED_VALUE}
-                      onValueChange={(value) =>
-                        handleMappingChange(field.key, value === UNMAPPED_VALUE ? "" : value)
-                      }
-                      options={[
-                        { value: UNMAPPED_VALUE, label: "— not mapped —" },
-                        ...(session.csv?.headers ?? []).map((h) => ({ value: h, label: h })),
-                      ]}
-                      className={hasErr ? "border-danger-line" : undefined}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <aside data-raside style={{ position: "sticky", top: 130 }}>
-            <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 16, padding: 16, marginBottom: 14 }}>
-              <div style={{ ...MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", color: "#9A9486", textTransform: "uppercase", marginBottom: 10 }}>Sample row · row 1</div>
-              {session.csv.headers.map((col) => (
-                <div key={col} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: "1px solid #F4F1E9", fontSize: 12.5 }}>
-                  <span style={{ ...MONO, color: "#8A6A12", flexShrink: 0 }}>{col}</span>
-                  <span style={{ fontWeight: 600, color: "#1A1916", textAlign: "right", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sampleRow[col] ?? "—"}</span>
-                </div>
-              ))}
-            </div>
-            <HelpfulTip style={{ marginBottom: 12 }}>
-              This sample row is only for checking. All rows in your CSV will use the same mapping.
-            </HelpfulTip>
-            <div style={{ background: isMappingValid ? "#EEF8F1" : "#FBEFCB", border: `1px solid ${isMappingValid ? "#CDEBD9" : "#F0DFA8"}`, borderRadius: 12, padding: "12px 14px", marginBottom: 12 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: isMappingValid ? "#2E8B57" : "#8A6A12" }}>
-                {isMappingValid ? "✓ All required fields mapped" : "Map all required fields"}
-              </div>
-            </div>
-            <Button type="button" variant="primary" fullWidth disabled={!isMappingValid} onClick={handleContinueToPreview}>
-              Preview PDFs →
-            </Button>
-            <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep("setup-design")} className="mt-2">
-              ← Back to templates
-            </Button>
-          </aside>
         </div>
       </div>
     );
@@ -1739,7 +1595,7 @@ export function BatchPdfClient() {
       <div>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, marginBottom: 12, flexWrap: "wrap" }}>
           <div>
-            <div style={STEP_LABEL_STYLE}>Step 4 · Place fields</div>
+            <div style={STEP_LABEL_STYLE}>Step 4 · Map &amp; style fields</div>
             <h2 style={{ ...H2, fontSize: 26, margin: "6px 0 3px" }}>Put your spreadsheet text on the design</h2>
             <p style={{ fontSize: 14, color: "#57534A", margin: 0, maxWidth: 620 }}>Choose a column, add it to the design, then drag the box onto the right blank space.</p>
           </div>
@@ -1764,66 +1620,8 @@ export function BatchPdfClient() {
             Check & confirm →
           </Button>
           <Button type="button" variant="secondary" size="lg" onClick={() => goToStep("setup-design")} className="shrink-0">
-            ← Back to upload
+            ← Back
           </Button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderStep5a = () => {
-    if (!selectedTemplate || !session.csv) return null;
-    const row = session.csv.rows[session.previewRowIndex] ?? {};
-    const mappedData = mapRowToTemplateData(row, session.mapping, selectedTemplate);
-    const pvPairs = selectedTemplate.fields.map((f) => ({ label: f.label, val: mappedData[f.key] || "—", empty: !mappedData[f.key] }));
-
-    return (
-      <div>
-        <div style={STEP_LABEL_STYLE}>Step 5 · Preview</div>
-        <h2 style={H2}>Check a few rows before you export</h2>
-        <p style={{ ...SUBTEXT, maxWidth: 620 }}>This is exactly how each PDF will look. Step through rows to spot anything that doesn&apos;t fit.</p>
-        <HelpfulTip style={{ maxWidth: 680, marginBottom: 16 }}>
-          Check the shortest and longest names you can find. Those two rows usually reveal most spacing problems.
-        </HelpfulTip>
-
-        <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24, alignItems: "start" }}>
-          <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 20, padding: 24, boxShadow: "0 24px 50px -32px rgba(26,25,22,0.3)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#1A1916" }}>PDF preview</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Button type="button" variant="secondary" aria-label="Previous row" onClick={handlePreviousRow} className="h-8 w-8 rounded-lg p-0 text-base">‹</Button>
-                <span style={{ ...MONO, fontSize: 12, color: "#6E6A61", minWidth: 84, textAlign: "center" }}>row {session.previewRowIndex + 1} / {csvRowCount}</span>
-                <Button type="button" variant="secondary" aria-label="Next row" onClick={handleNextRow} className="h-8 w-8 rounded-lg p-0 text-base">›</Button>
-              </div>
-            </div>
-            <TemplatePreviewRenderer template={selectedTemplate} data={mappedData} />
-          </div>
-
-          <aside data-raside style={{ position: "sticky", top: 130 }}>
-            <div style={{ background: "#FFFFFF", border: "1px solid #E7E2D6", borderRadius: 16, padding: 16, marginBottom: 14 }}>
-              <div style={{ ...MONO, fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", color: "#9A9486", textTransform: "uppercase", marginBottom: 10 }}>Values in this row</div>
-              {pvPairs.map((p) => (
-                <div key={p.label} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 0", borderBottom: "1px solid #F4F1E9", fontSize: 12.5 }}>
-                  <span style={{ color: "#8A857A" }}>{p.label}</span>
-                  <span style={{ fontWeight: 600, color: p.empty ? "#C9C1B0" : "#1A1916", textAlign: "right", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.val}</span>
-                </div>
-              ))}
-            </div>
-            {missingValueWarnings.length > 0 && (
-              <div style={{ background: "#FBEFCB", border: "1px solid #F0DFA8", borderRadius: 12, padding: "10px 14px", fontSize: 13, color: "#8A6A12", marginBottom: 12 }}>
-                Some cells are empty — check warnings in the mapping step.
-              </div>
-            )}
-            <HelpfulTip style={{ marginBottom: 12 }}>
-              Empty values are okay if they are intentional. Go back to mapping if something important is missing.
-            </HelpfulTip>
-            <Button type="button" variant="primary" fullWidth onClick={handleContinueToExport}>
-              Generate free ZIP →
-            </Button>
-            <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep("mapping")} className="mt-2">
-              ← Back to mapping
-            </Button>
-          </aside>
         </div>
       </div>
     );
@@ -2014,6 +1812,7 @@ export function BatchPdfClient() {
               row={previewRow}
               rowIndex={session.previewRowIndex}
               rowCount={csv.rows.length}
+              exportOptions={session.customExportOptions}
               onPrevious={handlePreviousRow}
               onNext={handleNextRow}
             />
@@ -2119,34 +1918,30 @@ export function BatchPdfClient() {
   };
 
   const renderStep6 = () => {
-    const exportStatus = isStarterMode ? starterExportStatus : customExportStatus;
-    const exportError = isStarterMode ? starterExportError : customExportError;
-    const zipName = isStarterMode ? "batch-pdf-free-export.zip" : "batch-pdf-custom-export.zip";
-    const doExport = isStarterMode ? handleStarterExport : handleCustomExport;
+    const exportStatus = customExportStatus;
+    const exportError = customExportError;
     const ptToIn = (pt: number) => `${(pt / 72).toFixed(2)} in`;
-    const summary: [string, string][] = isStarterMode
-      ? [["Template", selectedTemplate?.name ?? "—"], ["Rows in CSV", String(csvRowCount)], ["PDFs in this export", String(freeRows)]]
-      : isPrintSheets && sheetLayoutInfo
-        ? [
-            ["Design", session.customDesign.asset?.fileName ?? "—"],
-            ["Rows in CSV", String(csvRowCount)],
-            ["Page size", `${ptToIn(sheetLayoutInfo.pageWidthPt)} × ${ptToIn(sheetLayoutInfo.pageHeightPt)}`],
-            ["Item size", `${ptToIn(sheetLayoutInfo.itemWidthPt)} × ${ptToIn(sheetLayoutInfo.itemHeightPt)}`],
-            ["Items per page", String(sheetLayoutInfo.layout.itemsPerPage)],
-            ["Sheet pages", String(sheetLayoutInfo.layout.pageCount)],
-          ]
-        : [["Design", session.customDesign.asset?.fileName ?? "—"], ["Rows in CSV", String(csvRowCount)], ["PDFs in this export", String(freeRows)]];
+    const summary: [string, string][] = isPrintSheets && sheetLayoutInfo
+      ? [
+          ["Design", session.customDesign.asset?.fileName ?? "—"],
+          ["Rows in CSV", String(csvRowCount)],
+          ["Page size", `${ptToIn(sheetLayoutInfo.pageWidthPt)} × ${ptToIn(sheetLayoutInfo.pageHeightPt)}`],
+          ["Item size", `${ptToIn(sheetLayoutInfo.itemWidthPt)} × ${ptToIn(sheetLayoutInfo.itemHeightPt)}`],
+          ["Items per page", String(sheetLayoutInfo.layout.itemsPerPage)],
+          ["Sheet pages", String(sheetLayoutInfo.layout.pageCount)],
+        ]
+      : [["Design", session.customDesign.asset?.fileName ?? "—"], ["Rows in CSV", String(csvRowCount)], ["PDFs in this export", String(freeRows)]];
     const customButtonLabel = isPrintSheets
-      ? "Generate free print-sheet ZIP ↓"
-      : "Generate free custom ZIP ↓";
+      ? "Generate free print-sheet PDF ↓"
+      : "Generate your free PDFs ↓";
 
     return (
       <div style={{ maxWidth: 600, margin: "0 auto" }}>
         <div style={{ textAlign: "center" }}>
-          <div style={STEP_LABEL_STYLE}>{isCustomMode ? "Step 7" : "Step 6"} · Export</div>
-          <h2 style={H2}>{isStarterMode ? "Generate your free ZIP" : "Generate your custom ZIP"}</h2>
+          <div style={STEP_LABEL_STYLE}>Final step · Export</div>
+          <h2 style={H2}>Generate your files</h2>
           <p style={{ ...SUBTEXT, maxWidth: 460, margin: "0 auto 24px" }}>
-            We&apos;ll render {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} and pack them into a ZIP you can download.
+            We&apos;ll render {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} and download them in a single file.
           </p>
           <HelpfulTip style={{ maxWidth: 500, margin: "0 auto 18px", textAlign: "left" }}>
             For a real event, print one test page first before printing the full batch.
@@ -2165,13 +1960,13 @@ export function BatchPdfClient() {
               <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 16, background: "#FBEFCB", borderRadius: 12, padding: "13px 15px" }}>
                 <span style={{ color: "#8A6A12", fontSize: 15 }}>★</span>
                 <div style={{ fontSize: 13, color: "#7A5E12", lineHeight: 1.5 }}>
-                  This batch generates up to <strong>{BATCH_PDF_LIMITS.freeExportRows} PDFs</strong> and packs them into a single ZIP.
+                  This batch generates up to <strong>{BATCH_PDF_LIMITS.freeExportRows} PDFs</strong> and packs them into a single file.
                 </div>
               </div>
-              <Button type="button" variant="brand" size="lg" fullWidth onClick={doExport} className="mt-4.5 text-base shadow-[0_2px_0_var(--color-brand-strong),0_12px_26px_-10px_rgba(242,176,30,0.6)]">
-                {isStarterMode ? "Generate free ZIP ↓" : customButtonLabel}
+              <Button type="button" variant="brand" size="lg" fullWidth onClick={handleCustomExport} className="mt-4.5 text-base shadow-[0_2px_0_var(--color-brand-strong),0_12px_26px_-10px_rgba(242,176,30,0.6)]">
+                {customButtonLabel}
               </Button>
-              <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep(isCustomMode ? "export-options" : "preview")} className="mt-2">← Back</Button>
+              <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep("export-options")} className="mt-2">← Back</Button>
             </div>
           )}
 
@@ -2182,11 +1977,11 @@ export function BatchPdfClient() {
           {exportStatus === "success" && (
             <div style={{ textAlign: "center", padding: "6px 0" }}>
               <div style={{ width: 56, height: 56, borderRadius: 16, background: "#2E8B57", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 26, fontWeight: 800, marginBottom: 16 }}>✓</div>
-              <div style={{ fontSize: 20, fontWeight: 800 }}>Your ZIP is ready</div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>Your export is ready</div>
               <div style={{ fontSize: 14, color: "#6E6A61", marginTop: 6 }}>
-                {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} packed into <span style={MONO}>{zipName}</span>
+                {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} downloaded.
               </div>
-              <Button type="button" variant="primary" size="lg" fullWidth onClick={doExport} className="mt-5 text-base">↓ Download again</Button>
+              <Button type="button" variant="primary" size="lg" fullWidth onClick={handleCustomExport} className="mt-5 text-base">↓ Download again</Button>
               <Button type="button" variant="secondary" fullWidth onClick={() => router.push("/")} className="mt-2">Start a new batch</Button>
             </div>
           )}
@@ -2196,7 +1991,7 @@ export function BatchPdfClient() {
               <div style={{ width: 56, height: 56, borderRadius: 16, background: "#FBEEEA", color: "#B5482E", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 26, marginBottom: 16, border: "1px solid #F2C9BD" }}>⚠</div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>Something went wrong</div>
               <div style={{ fontSize: 14, color: "#6E6A61", marginTop: 6, lineHeight: 1.5 }}>{exportError ?? "We couldn't finish generating your PDFs. Please try again."}</div>
-              <Button type="button" variant="brand" size="lg" fullWidth onClick={doExport} className="mt-5">Try again</Button>
+              <Button type="button" variant="brand" size="lg" fullWidth onClick={handleCustomExport} className="mt-5">Try again</Button>
             </div>
           )}
         </div>
@@ -2207,13 +2002,12 @@ export function BatchPdfClient() {
   // ── Main render ────────────────────────────────────────────────────────────
 
   const isCustomPlacementStep = Boolean(
-    session.csv && session.step === "mapping" && isCustomMode,
+    session.csv && session.step === "mapping",
   );
   // Preview/export-setup also benefit from a wider shell so the design preview
   // and the text-fit panel can sit side by side without wasted margins.
   const isWideCustomStep = Boolean(
     session.csv &&
-      isCustomMode &&
       (session.step === "preview" || session.step === "export-options"),
   );
   const createShellMaxWidth =
@@ -2242,13 +2036,10 @@ export function BatchPdfClient() {
           </div>
         )}
         {session.csv && session.step === "choose-design" && renderChooseDesign()}
-        {session.csv && session.step === "setup-design" && isStarterMode && renderStep3a()}
-        {session.csv && session.step === "setup-design" && isCustomMode && renderStep3b()}
-        {session.csv && session.step === "mapping" && isStarterMode && renderStep4a()}
-        {session.csv && session.step === "mapping" && isCustomMode && renderStep4b()}
-        {session.csv && session.step === "preview" && isStarterMode && renderStep5a()}
-        {session.csv && session.step === "preview" && isCustomMode && renderStep5b()}
-        {session.csv && session.step === "export-options" && isCustomMode && renderCustomExportOptionsStep()}
+        {session.csv && session.step === "setup-design" && renderStep3b()}
+        {session.csv && session.step === "mapping" && renderStep4b()}
+        {session.csv && session.step === "preview" && renderStep5b()}
+        {session.csv && session.step === "export-options" && renderCustomExportOptionsStep()}
         {session.csv && session.step === "export" && renderStep6()}
       </div>
 

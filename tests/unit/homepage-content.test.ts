@@ -29,7 +29,7 @@ describe("homepage content", () => {
     const plan = homepagePricingPlans[0];
 
     expect(plan?.badge).toBe("available now");
-    expect(plan?.features).toContain("Download polished PDFs as a ZIP");
+    expect(plan?.features).toContain("Download polished PDFs as a single file");
   });
 
   it("does not mention payment or a paid tier anywhere in homepage content", () => {

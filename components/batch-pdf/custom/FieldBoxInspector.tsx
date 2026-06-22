@@ -1,8 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { Info, Trash2 } from "lucide-react";
 import { TextStyleControls } from "./TextStyleControls";
 import { FontPicker } from "./fonts/FontPicker";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Tooltip } from "@/components/ui/tooltip";
 import { CUSTOM_DESIGN_LIMITS } from "@/lib/batch-pdf/limits";
 import type { CustomFieldBox, FieldSource, TextBoxStyle } from "@/lib/batch-pdf/custom/types";
 
@@ -11,7 +16,20 @@ type FieldBoxInspectorProps = {
   csvHeaders: string[];
   onUpdate: (boxId: string, patch: Partial<CustomFieldBox>) => void;
   onDelete: (boxId: string) => void;
-  onDuplicate: (boxId: string) => void;
+};
+
+const OVERFLOW_OPTIONS = [
+  { value: "shrinkToFit", label: "Shrink to fit" },
+  { value: "wrap", label: "Wrap to new lines" },
+  { value: "truncate", label: "Truncate with …" },
+  { value: "errorIfOverflow", label: "Block if it doesn't fit" },
+];
+
+const OVERFLOW_HINTS: Record<TextBoxStyle["overflowMode"], string> = {
+  shrinkToFit: "Tries smaller text sizes down to the minimum font size.",
+  wrap: "Moves text onto multiple lines within the box.",
+  truncate: "Cuts text with an ellipsis when it does not fit.",
+  errorIfOverflow: "Blocks export unless the full text fits at the configured size.",
 };
 
 function sourceValue(source: FieldSource): string {
@@ -42,13 +60,12 @@ export function FieldBoxInspector({
   csvHeaders,
   onUpdate,
   onDelete,
-  onDuplicate,
 }: FieldBoxInspectorProps) {
   const [showMore, setShowMore] = useState(false);
 
   if (!box) {
     return (
-      <div className="rounded-lg border border-dashed border-line bg-muted p-4 text-sm leading-6 text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-line bg-muted p-4 text-sm leading-6 text-muted-foreground">
         Add a field or click a box on the design to edit it.
       </div>
     );
@@ -96,8 +113,13 @@ export function FieldBoxInspector({
     onUpdate(box.id, { style: patchStyle(box.style, patch) });
   }
 
+  const sourceOptions = [
+    ...csvHeaders.map((header) => ({ value: `csv:${header}`, label: header })),
+    { value: "static", label: "Custom text" },
+  ];
+
   return (
-    <div className="space-y-4 rounded-lg border border-line bg-panel p-4">
+    <div className="space-y-4 rounded-xl border border-line bg-panel p-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Selected field
@@ -105,26 +127,20 @@ export function FieldBoxInspector({
         <p className="mt-1 truncate text-base font-semibold text-ink">{friendlyFieldName(box)}</p>
       </div>
 
-      <label className="space-y-1 text-sm font-medium text-ink">
+      <label className="block space-y-1 text-sm font-medium text-ink">
         <span>What text goes here?</span>
-        <select
+        <Select
           value={selectedSource}
-          onChange={(event) => updateSource(event.target.value)}
-          className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm"
-        >
-          {csvHeaders.map((header) => (
-            <option key={header} value={`csv:${header}`}>
-              {header}
-            </option>
-          ))}
-          <option value="static">Custom text</option>
-        </select>
+          onValueChange={updateSource}
+          options={sourceOptions}
+          aria-label="What text goes here?"
+        />
       </label>
 
       {box.source.type === "staticText" ? (
-        <label className="space-y-1 text-sm font-medium text-ink">
+        <label className="block space-y-1 text-sm font-medium text-ink">
           <span>Custom text</span>
-          <input
+          <Input
             type="text"
             value={box.source.value}
             onChange={(event) =>
@@ -132,7 +148,6 @@ export function FieldBoxInspector({
                 source: { type: "staticText", value: event.target.value },
               })
             }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm"
           />
         </label>
       ) : null}
@@ -147,16 +162,17 @@ export function FieldBoxInspector({
         </label>
         <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           <span>Weight</span>
-          <select
+          <Select
             value={box.style.fontWeight}
-            onChange={(event) =>
-              updateStyle({ fontWeight: event.target.value as TextBoxStyle["fontWeight"] })
+            onValueChange={(value) =>
+              updateStyle({ fontWeight: value as TextBoxStyle["fontWeight"] })
             }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium normal-case tracking-normal text-ink"
-          >
-            <option value="normal">Normal</option>
-            <option value="bold">Bold</option>
-          </select>
+            options={[
+              { value: "normal", label: "Normal" },
+              { value: "bold", label: "Bold" },
+            ]}
+            aria-label="Font weight"
+          />
         </label>
       </div>
 
@@ -165,21 +181,31 @@ export function FieldBoxInspector({
           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Text size
           </p>
-          <div className="flex rounded-lg border border-line bg-muted p-1">
-            <button
+          <div className="flex gap-1 rounded-lg border border-line bg-muted p-1">
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
+              fullWidth
               onClick={() => updateFontSize(-2)}
-              className="flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-panel"
+              aria-label="Smaller text"
+              title="Smaller"
+              className="rounded-md text-ink hover:bg-panel"
             >
-              <span aria-hidden>↓</span> Smaller
-            </button>
-            <button
+              <span aria-hidden>↓</span>
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
+              fullWidth
               onClick={() => updateFontSize(2)}
-              className="flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm font-semibold hover:bg-panel"
+              aria-label="Bigger text"
+              title="Bigger"
+              className="rounded-md text-ink hover:bg-panel"
             >
-              <span aria-hidden>↑</span> Bigger
-            </button>
+              <span aria-hidden>↑</span>
+            </Button>
           </div>
         </div>
 
@@ -209,21 +235,53 @@ export function FieldBoxInspector({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <button
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            If the text is too long
+          </p>
+          <Tooltip
+            content={
+              <div className="space-y-1.5">
+                <p className="font-semibold text-panel">When text is wider than its box:</p>
+                <p><span className="font-semibold">Shrink to fit</span> — lowers the font size (down to the minimum size) until it fits on one line.</p>
+                <p><span className="font-semibold">Wrap to new lines</span> — keeps the size and flows text onto multiple lines; blocks export if the lines are taller than the box.</p>
+                <p><span className="font-semibold">Truncate</span> — keeps the size and cuts extra text with an ellipsis (…).</p>
+                <p><span className="font-semibold">Block if it doesn&apos;t fit</span> — keeps the size on one line and flags export until it fits.</p>
+              </div>
+            }
+          >
+            <button
+              type="button"
+              aria-label="How overflow handling works"
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-accent"
+            >
+              <Info className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+        </div>
+        <Select
+          value={box.style.overflowMode}
+          onValueChange={(value) =>
+            updateStyle({ overflowMode: value as TextBoxStyle["overflowMode"] })
+          }
+          options={OVERFLOW_OPTIONS}
+          aria-label="Text overflow handling"
+        />
+        <p className="text-xs leading-4 text-muted-foreground">
+          {OVERFLOW_HINTS[box.style.overflowMode]}
+        </p>
+      </div>
+
+      <div>
+        <Button
           type="button"
-          onClick={() => onDuplicate(box.id)}
-          className="rounded-lg border border-line px-3 py-2 text-sm font-medium hover:border-accent hover:text-accent"
-        >
-          Duplicate
-        </button>
-        <button
-          type="button"
+          variant="danger"
+          size="sm"
           onClick={() => onDelete(box.id)}
-          className="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
         >
-          Delete
-        </button>
+          <Trash2 className="h-4 w-4" /> Delete field
+        </Button>
       </div>
 
       <div className="border-t border-line pt-3">

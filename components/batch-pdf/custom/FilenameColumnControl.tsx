@@ -1,7 +1,10 @@
 "use client";
 
-import { ControlGroup, inputClass } from "./exportControls";
+import { ControlGroup } from "./exportControls";
+import { Select } from "@/components/ui/select";
 import type { ExportOptions } from "@/lib/batch-pdf/custom/types";
+
+const AUTO_VALUE = "__auto__";
 
 export function FilenameColumnControl({
   options,
@@ -17,21 +20,17 @@ export function FilenameColumnControl({
       label="Filename column"
       hint="Used to name each PDF. Defaults to a safe name when left automatic."
     >
-      <select
+      <Select
         aria-label="Filename column"
-        value={options.filenameColumn ?? ""}
-        onChange={(event) =>
-          onChange({ filenameColumn: event.target.value === "" ? undefined : event.target.value })
+        value={options.filenameColumn ?? AUTO_VALUE}
+        onValueChange={(value) =>
+          onChange({ filenameColumn: value === AUTO_VALUE ? undefined : value })
         }
-        className={inputClass}
-      >
-        <option value="">Automatic</option>
-        {csvHeaders.map((header) => (
-          <option key={header} value={header}>
-            {header}
-          </option>
-        ))}
-      </select>
+        options={[
+          { value: AUTO_VALUE, label: "Automatic" },
+          ...csvHeaders.map((header) => ({ value: header, label: header })),
+        ]}
+      />
     </ControlGroup>
   );
 }

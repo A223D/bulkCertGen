@@ -15,7 +15,7 @@ export function AppShell({ children }: AppShellProps) {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "15px 32px",
+          padding: "15px clamp(16px, 4vw, 32px)",
           backdropFilter: "blur(10px)",
           background: "rgba(250,248,243,0.82)",
           borderBottom: "1px solid rgba(231,226,214,0.7)",
@@ -59,6 +59,7 @@ export function AppShell({ children }: AppShellProps) {
             />
           </span>
           <span
+            className="hidden sm:inline"
             style={{
               fontWeight: 800,
               fontSize: 16,
@@ -81,6 +82,7 @@ export function AppShell({ children }: AppShellProps) {
         >
           <Link
             href="/legal/privacy"
+            className="hidden sm:inline-flex"
             style={{
               color: "#4A463E",
               padding: "8px 12px",
@@ -92,6 +94,7 @@ export function AppShell({ children }: AppShellProps) {
           </Link>
           <Link
             href="/#faq"
+            className="hidden sm:inline-flex"
             style={{
               color: "#4A463E",
               padding: "8px 12px",

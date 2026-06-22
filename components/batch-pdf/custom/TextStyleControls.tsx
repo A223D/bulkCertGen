@@ -1,5 +1,8 @@
 "use client";
 
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CUSTOM_DESIGN_LIMITS } from "@/lib/batch-pdf/limits";
 import type { TextBoxStyle } from "@/lib/batch-pdf/custom/types";
 
@@ -25,18 +28,17 @@ export function TextStyleControls({ style, onChange }: TextStyleControlsProps) {
       <div className="grid grid-cols-2 gap-3">
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Size</span>
-          <input
+          <Input
             type="number"
             min={CUSTOM_DESIGN_LIMITS.minFontSize}
             max={CUSTOM_DESIGN_LIMITS.maxFontSize}
             value={style.fontSize}
             onChange={(event) => patch({ fontSize: numberValue(event.target.value) })}
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
           />
         </label>
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Min size</span>
-          <input
+          <Input
             type="number"
             min={CUSTOM_DESIGN_LIMITS.minFontSize}
             max={CUSTOM_DESIGN_LIMITS.maxFontSize}
@@ -44,7 +46,6 @@ export function TextStyleControls({ style, onChange }: TextStyleControlsProps) {
             onChange={(event) =>
               patch({ minFontSize: numberValue(event.target.value) })
             }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
           />
         </label>
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
@@ -58,7 +59,7 @@ export function TextStyleControls({ style, onChange }: TextStyleControlsProps) {
         </label>
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Line height</span>
-          <input
+          <Input
             type="number"
             min="0.8"
             max="2"
@@ -67,78 +68,45 @@ export function TextStyleControls({ style, onChange }: TextStyleControlsProps) {
             onChange={(event) =>
               patch({ lineHeight: numberValue(event.target.value) })
             }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
           />
         </label>
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Horizontal</span>
-          <select
+          <Select
             value={style.align}
-            onChange={(event) =>
-              patch({ align: event.target.value as TextBoxStyle["align"] })
-            }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
-          >
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
-          </select>
+            onValueChange={(value) => patch({ align: value as TextBoxStyle["align"] })}
+            options={[
+              { value: "left", label: "Left" },
+              { value: "center", label: "Center" },
+              { value: "right", label: "Right" },
+            ]}
+            aria-label="Horizontal alignment"
+          />
         </label>
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Vertical</span>
-          <select
+          <Select
             value={style.verticalAlign}
-            onChange={(event) =>
-              patch({
-                verticalAlign: event.target.value as TextBoxStyle["verticalAlign"],
-              })
+            onValueChange={(value) =>
+              patch({ verticalAlign: value as TextBoxStyle["verticalAlign"] })
             }
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
-          >
-            <option value="top">Top</option>
-            <option value="middle">Middle</option>
-            <option value="bottom">Bottom</option>
-          </select>
+            options={[
+              { value: "top", label: "Top" },
+              { value: "middle", label: "Middle" },
+              { value: "bottom", label: "Bottom" },
+            ]}
+            aria-label="Vertical alignment"
+          />
         </label>
       </div>
       <label className="flex items-center gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={style.uppercase}
-          onChange={(event) => patch({ uppercase: event.target.checked })}
-          className="h-4 w-4 accent-accent"
+          onCheckedChange={(checked) => patch({ uppercase: checked })}
+          aria-label="Uppercase"
         />
         Uppercase
       </label>
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">
-          <span>Overflow mode</span>
-          <select
-            value={style.overflowMode}
-            onChange={(event) =>
-              patch({
-                overflowMode: event.target.value as TextBoxStyle["overflowMode"],
-              })
-            }
-            className="mt-1 w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm text-ink"
-          >
-            <option value="shrinkToFit">Shrink to fit</option>
-            <option value="wrap">Wrap</option>
-            <option value="truncate">Truncate</option>
-            <option value="errorIfOverflow">Error if overflow</option>
-          </select>
-        </label>
-        <p className="text-xs leading-4 text-muted-foreground">
-          {style.overflowMode === "shrinkToFit" &&
-            "Tries smaller text sizes down to the minimum font size."}
-          {style.overflowMode === "wrap" &&
-            "Moves text onto multiple lines within the box."}
-          {style.overflowMode === "truncate" &&
-            "Cuts text with an ellipsis when it does not fit."}
-          {style.overflowMode === "errorIfOverflow" &&
-            "Blocks export unless the full text fits at the configured size."}
-        </p>
-      </div>
     </div>
   );
 }

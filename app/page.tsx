@@ -254,11 +254,11 @@ function ManualLoopCard() {
 
   return (
     <section style={{ padding: "40px 0 20px" }}>
-      <div className="mx-auto max-w-[1440px] px-8">
-        <div className="grid gap-[52px] rounded-[28px] bg-[#1a1916] p-[52px] text-[#fcfbf7] lg:grid-cols-2 lg:items-center">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
+        <div className="grid gap-[52px] rounded-[28px] bg-[#1a1916] p-6 text-[#fcfbf7] sm:p-[52px] lg:grid-cols-2 lg:items-center">
           <div>
             <SectionKicker variant="dark">The old way</SectionKicker>
-            <h2 className="mt-4 max-w-xl text-[42px] font-extrabold leading-[1.06] tracking-[-0.03em]">
+            <h2 className="mt-4 max-w-xl text-[34px] font-extrabold leading-[1.06] tracking-[-0.03em] sm:text-[42px]">
               Stop copy-pasting names one by one.
             </h2>
             <p className="mt-[18px] max-w-[440px] text-[17px] leading-[1.6] text-[#b7b1a4]">
@@ -440,11 +440,11 @@ function SpreadsheetChecklist() {
 
   return (
     <section style={{ padding: "56px 0 36px" }}>
-      <div className="mx-auto max-w-[1440px] px-8">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
         <div className="grid gap-10 rounded-[28px] border border-[#e7e2d6] bg-white p-6 shadow-[0_1px_0_rgba(26,25,22,0.02)] sm:p-12 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
           <div className="lg:sticky lg:top-24">
             <SectionKicker>Spreadsheet to finished PDFs</SectionKicker>
-            <h2 className="mt-[14px] max-w-lg text-[42px] font-extrabold leading-[1.07] tracking-[-0.03em]">
+            <h2 className="mt-[14px] max-w-lg text-[34px] font-extrabold leading-[1.07] tracking-[-0.03em] sm:text-[42px]">
               A practical checklist for non-technical teams.
             </h2>
             <p className="mt-[14px] max-w-[440px] text-[17px] leading-[1.6] text-[#57534a]">
@@ -633,11 +633,11 @@ function MappingPanel() {
 
   return (
     <section id="mapping" style={{ padding: "56px 0 36px" }}>
-      <div className="mx-auto max-w-[1440px] px-8">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
         <div className="grid gap-[46px] rounded-[28px] border border-[#e7e2d6] bg-[#fffefb] p-6 shadow-[0_1px_0_rgba(26,25,22,0.02)] sm:p-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
           <div>
             <SectionKicker>The mapping</SectionKicker>
-            <h2 className="mt-[14px] max-w-xl text-[42px] font-extrabold leading-[1.07] tracking-[-0.03em]">
+            <h2 className="mt-[14px] max-w-xl text-[34px] font-extrabold leading-[1.07] tracking-[-0.03em] sm:text-[42px]">
               Fill the blanks from your spreadsheet.
             </h2>
             <p className="mt-[14px] max-w-[430px] text-[17px] leading-[1.6] text-[#57534a]">
@@ -682,11 +682,11 @@ function PreviewPanel() {
 
   return (
     <section style={{ padding: "56px 0 36px" }}>
-      <div className="mx-auto max-w-[1440px] px-8">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
         <div className="grid gap-[46px] lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
           <div className="lg:order-2">
             <SectionKicker>Preview &amp; checks</SectionKicker>
-            <h2 className="mt-[14px] max-w-xl text-[42px] font-extrabold leading-[1.07] tracking-[-0.03em]">
+            <h2 className="mt-[14px] max-w-xl text-[34px] font-extrabold leading-[1.07] tracking-[-0.03em] sm:text-[42px]">
               Preview before you export.
             </h2>
             <p className="mt-[14px] max-w-[440px] text-[17px] leading-[1.6] text-[#57534a]">
@@ -767,10 +767,10 @@ function PreviewPanel() {
 function PricingSection() {
   return (
     <section id="export" style={{ padding: "56px 0 36px" }}>
-      <div className="mx-auto max-w-[1440px] px-8">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
         <div className="mx-auto mb-10 max-w-[620px] text-center">
           <SectionKicker>Generate &amp; export</SectionKicker>
-          <h2 className="mt-[14px] text-[44px] font-extrabold leading-[1.06] tracking-[-0.03em]">
+          <h2 className="mt-[14px] text-[34px] font-extrabold leading-[1.06] tracking-[-0.03em] sm:text-[44px]">
             Download everything as a ZIP.
           </h2>
           <p className="mt-3 text-[17.5px] leading-[1.55] text-[#57534a]">
@@ -877,8 +877,8 @@ function PricingSection() {
 function PrivacyBand() {
   return (
     <section style={{ padding: "40px 0 36px" }}>
-      <div className="mx-auto max-w-[1440px] px-8">
-        <div className="flex flex-wrap items-center gap-[34px] rounded-[24px] border border-[#e0dccf] bg-[#f0efe9] p-[38px_44px]">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
+        <div className="flex flex-wrap items-center gap-[34px] rounded-[24px] border border-[#e0dccf] bg-[#f0efe9] p-6 sm:p-[38px_44px]">
           <span className="inline-flex h-[64px] w-[64px] shrink-0 items-center justify-center rounded-[16px] bg-[#1a1916]">
             <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
@@ -894,7 +894,7 @@ function PrivacyBand() {
               />
             </svg>
           </span>
-          <div className="min-w-[280px] flex-1">
+          <div className="min-w-0 flex-1 basis-[280px]">
             <h2 className="text-[26px] font-extrabold leading-[1.2] tracking-[-0.02em] text-[#1a1916]">
               Your files are used only for your batch.
             </h2>
@@ -913,7 +913,7 @@ function PrivacyBand() {
 function HomeFooter() {
   return (
     <footer className="border-t border-[#e7e2d6] pt-[36px] pb-[56px]">
-      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-[18px] px-8">
+      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-[18px] px-4 sm:px-8">
         <div className="flex items-center gap-[11px]">
           <BrandMark size="sm" />
           <span className="text-[15px] font-extrabold tracking-[-0.02em] text-[#1a1916]">
@@ -936,7 +936,7 @@ function HomeFooter() {
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#faf8f3] text-[#1a1916]">
-      <div className="mx-auto max-w-[1440px] px-8">
+      <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
         <nav className="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-[#e7e2d6]/70 bg-[#faf8f3]/78 py-[18px] backdrop-blur-[10px]">
           <a
             href="#top"
@@ -971,15 +971,15 @@ export default function HomePage() {
           className="grid items-center gap-12 pb-[56px] pt-[40px] lg:grid-cols-[1.02fr_1.18fr]"
         >
           <div>
-            <div className="inline-flex items-center gap-[9px] rounded-full border border-[#e7e2d6] bg-white px-[14px] py-[7px] text-[13px] font-semibold text-[#4a463e] shadow-[0_1px_0_rgba(26,25,22,0.03)]">
+            <div className="inline-flex flex-wrap items-center gap-[9px] rounded-2xl border border-[#e7e2d6] bg-white px-[14px] py-[7px] text-[13px] font-semibold text-[#4a463e] shadow-[0_1px_0_rgba(26,25,22,0.03)] sm:rounded-full">
               <span className="rounded-[6px] bg-[#fbefcb] px-[7px] py-[3px] font-mono text-[11px] font-bold text-[#8a6a12]">
                 .csv → .pdf
               </span>
               For teachers, organizers, clubs, and busy teams
             </div>
-            <h1 className="mt-[22px] max-w-3xl text-[60px] font-extrabold leading-[1.02] tracking-[-0.035em]">
+            <h1 className="mt-[22px] max-w-3xl text-[42px] font-extrabold leading-[1.02] tracking-[-0.035em] sm:text-[60px]">
               Make certificates, badges, and cards from{" "}
-              <span className="relative whitespace-nowrap">
+              <span className="relative sm:whitespace-nowrap">
                 a spreadsheet
                 <span
                   className="absolute inset-x-0 -z-10 h-[13px] rounded-[3px] bg-[#f7ce5e]"
@@ -1028,10 +1028,10 @@ export default function HomePage() {
       <ManualLoopCard />
 
       <section id="how" style={{ padding: "56px 0 36px" }}>
-        <div className="mx-auto max-w-[1440px] px-8">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
           <div className="mx-auto mb-11 max-w-[640px] text-center">
             <SectionKicker>How it works</SectionKicker>
-            <h2 className="mt-[14px] text-[44px] font-extrabold leading-[1.06] tracking-[-0.03em]">
+            <h2 className="mt-[14px] text-[34px] font-extrabold leading-[1.06] tracking-[-0.03em] sm:text-[44px]">
               From spreadsheet to finished PDFs.
             </h2>
             <p className="mt-3 text-[17.5px] leading-[1.55] text-[#57534a]">
@@ -1049,11 +1049,11 @@ export default function HomePage() {
       <SpreadsheetChecklist />
 
       <section id="uses" style={{ padding: "56px 0 36px" }}>
-        <div className="mx-auto max-w-[1440px] px-8">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
           <div className="mb-9 flex flex-wrap items-end justify-between gap-6">
             <div className="max-w-[560px]">
               <SectionKicker>What people make</SectionKicker>
-              <h2 className="mt-[14px] text-[44px] font-extrabold leading-[1.06] tracking-[-0.03em]">
+              <h2 className="mt-[14px] text-[34px] font-extrabold leading-[1.06] tracking-[-0.03em] sm:text-[44px]">
                 School, event, and club paperwork that looks polished.
               </h2>
             </div>
@@ -1083,10 +1083,10 @@ export default function HomePage() {
       <PrivacyBand />
 
       <section id="faq" style={{ padding: "56px 0 36px" }}>
-        <div className="mx-auto max-w-[1440px] grid gap-12 px-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
+        <div className="mx-auto grid max-w-[1440px] gap-12 px-4 sm:px-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
           <div className="lg:sticky lg:top-24">
             <SectionKicker>Questions</SectionKicker>
-            <h2 className="mt-[14px] text-[40px] font-extrabold leading-[1.08] tracking-[-0.03em]">
+            <h2 className="mt-[14px] text-[34px] font-extrabold leading-[1.08] tracking-[-0.03em] sm:text-[40px]">
               Good to know.
             </h2>
             <p className="mt-3 max-w-[300px] text-[16px] leading-[1.55] text-[#6e6a61]">
@@ -1116,8 +1116,8 @@ export default function HomePage() {
       </section>
 
       <section id="cta" style={{ padding: "40px 0 64px" }}>
-        <div className="mx-auto max-w-[1440px] px-8">
-          <div className="relative overflow-hidden rounded-[30px] bg-[#1a1916] px-12 py-[64px] text-center text-[#fcfbf7]">
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
+          <div className="relative overflow-hidden rounded-[30px] bg-[#1a1916] px-6 py-12 text-center text-[#fcfbf7] sm:px-12 sm:py-[64px]">
             <div
               className="pointer-events-none absolute left-1/2 top-[-60px] h-[240px] w-[420px] -translate-x-1/2"
               style={{
@@ -1130,7 +1130,7 @@ export default function HomePage() {
               <div className="inline-flex items-center gap-2 rounded-full bg-[#2a2723] px-[14px] py-[7px] font-mono text-[12px] font-semibold text-[#f2b01e]">
                 Excel or Google Sheets + template → ZIP of PDFs
               </div>
-              <h2 className="mx-auto mt-[22px] max-w-[680px] text-[52px] font-extrabold leading-[1.05] tracking-[-0.035em] text-[#fcfbf7]">
+              <h2 className="mx-auto mt-[22px] max-w-[680px] text-[38px] font-extrabold leading-[1.05] tracking-[-0.035em] text-[#fcfbf7] sm:text-[52px]">
                 Have a roster and a template? Generate the certificates, badges, or cards.
               </h2>
               <p className="mx-auto mt-4 max-w-[480px] text-[18px] leading-[1.55] text-[#b7b1a4]">

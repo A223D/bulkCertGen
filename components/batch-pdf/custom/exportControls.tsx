@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Checkbox as UiCheckbox } from "@/components/ui/checkbox";
 
 // Shared presentational primitives for the custom export options controls.
 // State is owned by the parent; these components only render and emit changes.
@@ -9,7 +10,7 @@ export const controlLabelClass =
   "text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground";
 
 export const inputClass =
-  "w-full rounded border border-line bg-panel px-2 py-1 text-sm";
+  "w-full rounded-lg border border-line bg-panel px-3 py-2.5 text-sm text-ink";
 
 export function ControlGroup({
   label,
@@ -141,11 +142,11 @@ export function Checkbox({
   hint?: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-2">
-      <input
-        type="checkbox"
+    <label className="flex cursor-pointer items-start gap-2.5">
+      <UiCheckbox
         checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
+        onCheckedChange={onChange}
+        aria-label={label}
         className="mt-0.5"
       />
       <span>

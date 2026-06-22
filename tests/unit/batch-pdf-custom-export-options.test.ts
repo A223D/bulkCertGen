@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { CUSTOM_DESIGN_LIMITS } from "../../lib/batch-pdf/limits.ts";
 import {
+  ACCEPTABLE_PRINT_DPI,
+  IDEAL_PRINT_DPI,
   applyOrientation,
+  assessPrintResolution,
   calculateImageResolutionForExport,
   createDefaultExportOptions,
   getCommonPageSizes,
@@ -64,6 +67,66 @@ describe("custom design export option utilities", () => {
       calculateImageResolutionForExport({
         designAsset: makeImageDesign(),
         exportOptions: makeOptions({ itemSizeMode: "fromDesign" }),
+      }),
+    ).toBeNull();
+  });
+
+  it("flags a low-resolution print and reports the pixels needed", () => {
+    const result = assessPrintResolution({
+      intrinsicWidth: 800,
+      intrinsicHeight: 600,
+      printWidthIn: 11,
+      printHeightIn: 8.5,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.level).toBe("low");
+    expect(Math.round(result?.effectiveDpi ?? 0)).toBe(71);
+    expect(result?.minWidthPxForAcceptable).toBe(Math.ceil(11 * ACCEPTABLE_PRINT_DPI));
+    expect(result?.minHeightPxForAcceptable).toBe(Math.ceil(8.5 * ACCEPTABLE_PRINT_DPI));
+    expect(result?.idealWidthPx).toBe(Math.ceil(11 * IDEAL_PRINT_DPI));
+    expect(result?.idealHeightPx).toBe(Math.ceil(8.5 * IDEAL_PRINT_DPI));
+  });
+
+  it("rates resolution as acceptable between the minimum and ideal DPI", () => {
+    const result = assessPrintResolution({
+      intrinsicWidth: 4 * 200,
+      intrinsicHeight: 3 * 200,
+      printWidthIn: 4,
+      printHeightIn: 3,
+    });
+
+    expect(result?.effectiveDpi).toBe(200);
+    expect(result?.level).toBe("acceptable");
+  });
+
+  it("rates resolution as ideal at or above the ideal DPI", () => {
+    const result = assessPrintResolution({
+      intrinsicWidth: 4 * 300,
+      intrinsicHeight: 3 * 300,
+      printWidthIn: 4,
+      printHeightIn: 3,
+    });
+
+    expect(result?.effectiveDpi).toBe(300);
+    expect(result?.level).toBe("ideal");
+  });
+
+  it("returns null for invalid resolution inputs", () => {
+    expect(
+      assessPrintResolution({
+        intrinsicWidth: 0,
+        intrinsicHeight: 600,
+        printWidthIn: 4,
+        printHeightIn: 3,
+      }),
+    ).toBeNull();
+    expect(
+      assessPrintResolution({
+        intrinsicWidth: 800,
+        intrinsicHeight: 600,
+        printWidthIn: 4,
+        printHeightIn: 0,
       }),
     ).toBeNull();
   });

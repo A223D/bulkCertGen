@@ -1,17 +1,39 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: oklch(0.974 0.012 85);
-  --color-panel: oklch(0.996 0.006 85);
-  --color-muted: oklch(0.944 0.012 85);
-  --color-muted-foreground: oklch(0.43 0.025 75);
-  --color-ink: oklch(0.19 0.018 70);
-  --color-line: oklch(0.88 0.018 80);
-  --color-accent: oklch(0.51 0.135 45);
-  --color-accent-soft: oklch(0.93 0.042 55);
-  --color-accent-contrast: oklch(0.99 0.006 85);
-  --color-disabled: oklch(0.82 0.012 80);
-  --color-disabled-foreground: oklch(0.48 0.018 75);
+  /* Brand surfaces — warm cream / ink / hairline */
+  --color-canvas: #faf8f3;
+  --color-panel: #ffffff;
+  --color-muted: #f4f1e9;
+  --color-muted-foreground: #6e6a61;
+  --color-ink: #1a1916;
+  --color-ink-soft: #4a463e;
+  --color-line: #e7e2d6;
+
+  /* Accent used for readable text / borders / focus (warm amber-brown). */
+  --color-accent: #a8780c;
+  --color-accent-soft: #fbefcb;
+  --color-accent-contrast: #ffffff;
+
+  /* Brand gold — primary calls to action (gold fill, ink text). */
+  --color-brand: #f2b01e;
+  --color-brand-strong: #c98f11;
+  --color-brand-contrast: #1a1916;
+  --color-brand-soft: #fffaeb;
+
+  /* Semantic status surfaces. */
+  --color-success: #2e8b57;
+  --color-success-soft: #eef8f1;
+  --color-success-line: #cdebd9;
+  --color-warning: #8a6a12;
+  --color-warning-soft: #fbefcb;
+  --color-warning-line: #f0dfa8;
+  --color-danger: #b5482e;
+  --color-danger-soft: #fbeeea;
+  --color-danger-line: #f2c9bd;
+
+  --color-disabled: #e7e2d6;
+  --color-disabled-foreground: #9a9486;
 
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-serif: var(--font-dm-serif), ui-serif, Georgia, serif;

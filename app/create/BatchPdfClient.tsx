@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Lock, LockOpen } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { UtilityStepper } from "@/components/batch-pdf/UtilityStepper";
 import type { WizardStep } from "@/components/batch-pdf/UtilityStepper";
 import { CustomDesignUpload } from "@/components/batch-pdf/custom/CustomDesignUpload";
@@ -32,7 +37,9 @@ import type {
 } from "@/lib/batch-pdf/custom/design-upload-state";
 import { isCustomFieldPlacementReady } from "@/lib/batch-pdf/custom/field-box-state";
 import {
-  calculateImageResolutionForExport,
+  ACCEPTABLE_PRINT_DPI,
+  IDEAL_PRINT_DPI,
+  assessPrintResolution,
   createDefaultExportOptions,
   resolveExportItemSizePoints,
   resolveSheetLayoutForExport,
@@ -320,6 +327,9 @@ const FINISHED_SIZE_PRESETS: FinishedSizePreset[] = [
 
 const MIN_EXPORT_LOADING_MS = 7000;
 
+// Radix Select reserves the empty string, so the "not mapped" choice uses a sentinel.
+const UNMAPPED_VALUE = "__unmapped__";
+
 type SheetLayoutInfo = {
   layout: SheetLayoutResult;
   pageWidthPt: number;
@@ -521,6 +531,82 @@ function getRecommendedFinishedSize(asset: DesignAsset): Pick<ExportOptions, "cu
   return { customItemWidth: 8.5, customItemHeight: 11, unit: "in" };
 }
 
+// Assess the uploaded image against the largest finished size it is likely to
+// be printed at (its recommended print size for the design's aspect ratio), so
+// we can warn about blurry output before the user invests time placing fields.
+function DesignDpiNotice({ asset }: { asset: DesignAsset }) {
+  const recommended = getRecommendedFinishedSize(asset);
+  const printWidthIn = recommended.customItemWidth ?? 0;
+  const printHeightIn = recommended.customItemHeight ?? 0;
+  const assessment = assessPrintResolution({
+    intrinsicWidth: asset.intrinsicWidth,
+    intrinsicHeight: asset.intrinsicHeight,
+    printWidthIn,
+    printHeightIn,
+  });
+
+  if (!assessment) return null;
+
+  const sizeLabel = `${formatInches(printWidthIn)} × ${formatInches(printHeightIn)} in`;
+
+  if (assessment.level === "low") {
+    return (
+      <div style={{ marginTop: 16, border: "1px solid #F2C9BD", background: "#FBEEEA", borderRadius: 12, padding: "13px 15px", color: "#7A2E1A", fontSize: 13, lineHeight: 1.55 }}>
+        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 4 }}>⚠ This image may print blurry</div>
+        At a typical {sizeLabel} print it works out to about{" "}
+        <strong>{Math.round(assessment.effectiveDpi)} DPI</strong>, below the{" "}
+        {ACCEPTABLE_PRINT_DPI} DPI minimum for a sharp print. For acceptable quality at this size, re-export your design at least{" "}
+        <strong>{assessment.minWidthPxForAcceptable} × {assessment.minHeightPxForAcceptable} px</strong>{" "}
+        ({assessment.idealWidthPx} × {assessment.idealHeightPx} px for crisp {IDEAL_PRINT_DPI} DPI) — or plan to print it smaller.
+      </div>
+    );
+  }
+
+  if (assessment.level === "acceptable") {
+    return (
+      <div style={{ marginTop: 16, border: "1px solid #F0DFA8", background: "#FFFAEB", borderRadius: 12, padding: "13px 15px", color: "#7A5E12", fontSize: 13, lineHeight: 1.55 }}>
+        <strong>About {Math.round(assessment.effectiveDpi)} DPI</strong> at a typical {sizeLabel} print — okay, but not crisp. For best results at this size, use{" "}
+        <strong>{assessment.idealWidthPx} × {assessment.idealHeightPx} px</strong> ({IDEAL_PRINT_DPI} DPI).
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 16, border: "1px solid #CDEBD9", background: "#EEF8F1", borderRadius: 12, padding: "13px 15px", color: "#2E5E43", fontSize: 13, lineHeight: 1.55 }}>
+      ✓ <strong>About {Math.round(assessment.effectiveDpi)} DPI</strong> at a typical {sizeLabel} print — a good resolution for sharp output.
+    </div>
+  );
+}
+
+function formatInches(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0$/, "");
+}
+
+function roundDimension(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+// True when the finished-size shape differs enough from the uploaded design
+// that the background image would be visibly stretched or letterboxed.
+function aspectRatiosDiffer(
+  itemWidthIn: number | undefined,
+  itemHeightIn: number | undefined,
+  asset: DesignAsset,
+): boolean {
+  if (
+    typeof itemWidthIn !== "number" ||
+    typeof itemHeightIn !== "number" ||
+    itemWidthIn <= 0 ||
+    itemHeightIn <= 0 ||
+    asset.intrinsicHeight <= 0
+  ) {
+    return false;
+  }
+  const itemRatio = itemWidthIn / itemHeightIn;
+  const designRatio = asset.intrinsicWidth / asset.intrinsicHeight;
+  return Math.abs(itemRatio / designRatio - 1) > 0.03;
+}
+
 function getBoxText(box: CustomFieldBox, row: CsvRow): string {
   const rawValue =
     box.source.type === "csvColumn" ? row[box.source.column] : box.source.value;
@@ -572,9 +658,9 @@ function CustomDesignReviewPreview({
           <div style={{ fontSize: 18, fontWeight: 800, marginTop: 3 }}>Check how one row looks</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button type="button" onClick={onPrevious} style={{ width: 32, height: 32, border: "1px solid #E7E2D6", background: "#fff", borderRadius: 8, fontSize: 16, color: "#4A463E", cursor: "pointer" }}>‹</button>
+          <Button type="button" variant="secondary" aria-label="Previous row" onClick={onPrevious} className="h-8 w-8 rounded-lg p-0 text-base">‹</Button>
           <span style={{ ...MONO, fontSize: 12, color: "#6E6A61", minWidth: 84, textAlign: "center" }}>row {rowIndex + 1} / {rowCount}</span>
-          <button type="button" onClick={onNext} style={{ width: 32, height: 32, border: "1px solid #E7E2D6", background: "#fff", borderRadius: 8, fontSize: 16, color: "#4A463E", cursor: "pointer" }}>›</button>
+          <Button type="button" variant="secondary" aria-label="Next row" onClick={onNext} className="h-8 w-8 rounded-lg p-0 text-base">›</Button>
         </div>
       </div>
 
@@ -810,6 +896,9 @@ export function BatchPdfClient() {
   const [customExportStatus, setCustomExportStatus] = useState<ExportStatus>("idle");
   const [customExportError, setCustomExportError] = useState<string | null>(null);
   const [showCustomSizeInputs, setShowCustomSizeInputs] = useState(false);
+  // Keep the finished size proportional to the uploaded design by default so a
+  // stretched/distorted print can't happen without an explicit opt-out.
+  const [lockAspectRatio, setLockAspectRatio] = useState(true);
 
   // Load CSV from sessionStorage on mount; redirect if missing
   useEffect(() => {
@@ -1134,6 +1223,65 @@ export function BatchPdfClient() {
     }));
   }, []);
 
+  // Edit one custom finished-size dimension. When the aspect ratio is locked,
+  // the other dimension is recomputed from the uploaded design's proportions.
+  const handleFinishedDimensionChange = useCallback(
+    (axis: "width" | "height", raw: string) => {
+      const value = raw ? Number.parseFloat(raw) : undefined;
+      setCustomExportStatus("idle");
+      setCustomExportError(null);
+      setSession((s) => {
+        const opts = s.customExportOptions;
+        const asset = s.customDesign.asset;
+        const ratio =
+          asset && asset.intrinsicHeight > 0
+            ? asset.intrinsicWidth / asset.intrinsicHeight
+            : null;
+        let width = axis === "width" ? value : opts.customItemWidth;
+        let height = axis === "height" ? value : opts.customItemHeight;
+        if (lockAspectRatio && ratio && value !== undefined && Number.isFinite(value)) {
+          if (axis === "width") height = roundDimension(value / ratio);
+          else width = roundDimension(value * ratio);
+        }
+        return {
+          ...s,
+          customExportOptions: {
+            ...opts,
+            itemSizeMode: "custom",
+            unit: "in",
+            customItemWidth: width,
+            customItemHeight: height,
+          },
+        };
+      });
+    },
+    [lockAspectRatio],
+  );
+
+  const handleToggleAspectLock = useCallback((locked: boolean) => {
+    setLockAspectRatio(locked);
+    if (!locked) return;
+    // Re-lock: snap height to the design's proportions using the current width.
+    setSession((s) => {
+      const opts = s.customExportOptions;
+      const asset = s.customDesign.asset;
+      const ratio =
+        asset && asset.intrinsicHeight > 0
+          ? asset.intrinsicWidth / asset.intrinsicHeight
+          : null;
+      if (!ratio || typeof opts.customItemWidth !== "number") return s;
+      return {
+        ...s,
+        customExportOptions: {
+          ...opts,
+          itemSizeMode: "custom",
+          unit: "in",
+          customItemHeight: roundDimension(opts.customItemWidth / ratio),
+        },
+      };
+    });
+  }, []);
+
   const handleCustomPreflightResultChange = useCallback(
     (result: CustomDesignPreflightResult | null) => {
       setSession((s) => ({ ...s, customPreflightResult: result }));
@@ -1319,9 +1467,9 @@ export function BatchPdfClient() {
       </div>
 
       <div style={{ textAlign: "center", marginTop: 24 }}>
-        <button type="button" onClick={() => router.push("/")} style={{ background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>
+        <Button type="button" variant="ghost" size="sm" onClick={() => router.push("/")}>
           ← Back to CSV upload
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1386,17 +1534,19 @@ export function BatchPdfClient() {
           <HelpfulTip style={{ marginTop: 14 }}>
             Short names like Name, Award, Date, and Role make the next step easier to check.
           </HelpfulTip>
-          <button
+          <Button
             type="button"
+            variant="primary"
+            fullWidth
             disabled={!selectedTemplate}
             onClick={handleContinueFromSetupDesign}
-            style={{ width: "100%", marginTop: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: selectedTemplate ? "#1A1916" : "#E7E2D6", color: selectedTemplate ? "#fff" : "#9A9486", fontWeight: 700, fontSize: 14.5, padding: "13px 18px", border: "none", borderRadius: 11, cursor: selectedTemplate ? "pointer" : "not-allowed" }}
+            className="mt-4.5"
           >
             Continue — map fields →
-          </button>
-          <button type="button" onClick={() => goToStep("choose-design")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+          </Button>
+          <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep("choose-design")} className="mt-2">
             ← Choose a different source
-          </button>
+          </Button>
         </aside>
       </div>
     );
@@ -1472,21 +1622,22 @@ export function BatchPdfClient() {
                 </HelpfulTip>
               </div>
             </div>
+            <DesignDpiNotice asset={customDesign.asset} />
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-              <button type="button" onClick={handleContinueFromSetupDesign} style={{ flex: 1, background: "#1A1916", color: "#fff", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: "pointer" }}>
+              <Button type="button" variant="primary" size="lg" onClick={handleContinueFromSetupDesign} className="flex-1">
                 Place fields →
-              </button>
-              <button type="button" onClick={handleCustomDesignReset} style={{ flexShrink: 0, background: "#fff", color: "#1A1916", fontWeight: 700, fontSize: 15, padding: "14px 20px", border: "1.5px solid #DAD3C4", borderRadius: 11, cursor: "pointer" }}>
+              </Button>
+              <Button type="button" variant="secondary" size="lg" onClick={handleCustomDesignReset} className="shrink-0">
                 Replace design
-              </button>
+              </Button>
             </div>
           </div>
         )}
 
         <div style={{ textAlign: "center", marginTop: 20 }}>
-          <button type="button" onClick={() => goToStep("choose-design")} style={{ background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13.5, cursor: "pointer" }}>
+          <Button type="button" variant="ghost" size="sm" onClick={() => goToStep("choose-design")}>
             ← Choose a different source
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -1532,16 +1683,18 @@ export function BatchPdfClient() {
                   </div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "#CFC8B8", paddingTop: 6 }}>→</div>
                   <div>
-                    <select
-                      value={session.mapping[field.key] ?? ""}
-                      onChange={(e) => handleMappingChange(field.key, e.target.value)}
-                      style={{ width: "100%", padding: "9px 10px", border: `1px solid ${hasErr ? "#F2C9BD" : "#DAD3C4"}`, borderRadius: 9, fontSize: 13.5, fontWeight: 600, background: "#fff", color: "#1A1916" }}
-                    >
-                      <option value="">— not mapped —</option>
-                      {session.csv?.headers.map((h) => (
-                        <option key={h} value={h}>{h}</option>
-                      ))}
-                    </select>
+                    <Select
+                      aria-label={`Map ${field.label}`}
+                      value={session.mapping[field.key] || UNMAPPED_VALUE}
+                      onValueChange={(value) =>
+                        handleMappingChange(field.key, value === UNMAPPED_VALUE ? "" : value)
+                      }
+                      options={[
+                        { value: UNMAPPED_VALUE, label: "— not mapped —" },
+                        ...(session.csv?.headers ?? []).map((h) => ({ value: h, label: h })),
+                      ]}
+                      className={hasErr ? "border-danger-line" : undefined}
+                    />
                   </div>
                 </div>
               );
@@ -1566,12 +1719,12 @@ export function BatchPdfClient() {
                 {isMappingValid ? "✓ All required fields mapped" : "Map all required fields"}
               </div>
             </div>
-            <button type="button" disabled={!isMappingValid} onClick={handleContinueToPreview} style={{ width: "100%", background: isMappingValid ? "#1A1916" : "#E7E2D6", color: isMappingValid ? "#fff" : "#9A9486", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: isMappingValid ? "pointer" : "not-allowed" }}>
+            <Button type="button" variant="primary" fullWidth disabled={!isMappingValid} onClick={handleContinueToPreview}>
               Preview PDFs →
-            </button>
-            <button type="button" onClick={() => goToStep("setup-design")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+            </Button>
+            <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep("setup-design")} className="mt-2">
               ← Back to templates
-            </button>
+            </Button>
           </aside>
         </div>
       </div>
@@ -1607,12 +1760,12 @@ export function BatchPdfClient() {
         />
 
         <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <button type="button" disabled={!isCustomFieldReady} onClick={handleContinueToPreview} style={{ flex: 1, background: isCustomFieldReady ? "#1A1916" : "#E7E2D6", color: isCustomFieldReady ? "#fff" : "#9A9486", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: isCustomFieldReady ? "pointer" : "not-allowed" }}>
+          <Button type="button" variant="primary" size="lg" fullWidth disabled={!isCustomFieldReady} onClick={handleContinueToPreview} className="flex-1">
             Check & confirm →
-          </button>
-          <button type="button" onClick={() => goToStep("setup-design")} style={{ flexShrink: 0, background: "#fff", color: "#1A1916", fontWeight: 700, fontSize: 15, padding: "14px 20px", border: "1.5px solid #DAD3C4", borderRadius: 11, cursor: "pointer" }}>
+          </Button>
+          <Button type="button" variant="secondary" size="lg" onClick={() => goToStep("setup-design")} className="shrink-0">
             ← Back to upload
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -1638,9 +1791,9 @@ export function BatchPdfClient() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#1A1916" }}>PDF preview</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <button type="button" onClick={handlePreviousRow} style={{ width: 30, height: 30, border: "1px solid #E7E2D6", background: "#fff", borderRadius: 8, fontSize: 14, color: "#4A463E", cursor: "pointer" }}>‹</button>
+                <Button type="button" variant="secondary" aria-label="Previous row" onClick={handlePreviousRow} className="h-8 w-8 rounded-lg p-0 text-base">‹</Button>
                 <span style={{ ...MONO, fontSize: 12, color: "#6E6A61", minWidth: 84, textAlign: "center" }}>row {session.previewRowIndex + 1} / {csvRowCount}</span>
-                <button type="button" onClick={handleNextRow} style={{ width: 30, height: 30, border: "1px solid #E7E2D6", background: "#fff", borderRadius: 8, fontSize: 14, color: "#4A463E", cursor: "pointer" }}>›</button>
+                <Button type="button" variant="secondary" aria-label="Next row" onClick={handleNextRow} className="h-8 w-8 rounded-lg p-0 text-base">›</Button>
               </div>
             </div>
             <TemplatePreviewRenderer template={selectedTemplate} data={mappedData} />
@@ -1664,12 +1817,12 @@ export function BatchPdfClient() {
             <HelpfulTip style={{ marginBottom: 12 }}>
               Empty values are okay if they are intentional. Go back to mapping if something important is missing.
             </HelpfulTip>
-            <button type="button" onClick={handleContinueToExport} style={{ width: "100%", background: "#1A1916", color: "#fff", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: "pointer" }}>
+            <Button type="button" variant="primary" fullWidth onClick={handleContinueToExport}>
               Generate free ZIP →
-            </button>
-            <button type="button" onClick={() => goToStep("mapping")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+            </Button>
+            <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep("mapping")} className="mt-2">
               ← Back to mapping
-            </button>
+            </Button>
           </aside>
         </div>
       </div>
@@ -1680,6 +1833,7 @@ export function BatchPdfClient() {
     const { customDesign, csv } = session;
     if (!customDesign.asset || !customDesign.file || !csv) return null;
 
+    const asset = customDesign.asset;
     const canContinue = isCustomTextFitReady;
     const hasWarnings = preflightStatus === "readyWithWarnings";
     const selectedSizePresetId = getFinishedSizePresetId(session.customExportOptions);
@@ -1687,34 +1841,175 @@ export function BatchPdfClient() {
     const recommendedSizePresetId = getFinishedSizePresetId({
       ...session.customExportOptions,
       itemSizeMode: "custom",
-      ...getRecommendedFinishedSize(customDesign.asset),
+      ...getRecommendedFinishedSize(asset),
     });
     const previewRow = csv.rows[session.previewRowIndex] ?? csv.rows[0] ?? {};
-    const imageResolution = calculateImageResolutionForExport({
-      designAsset: customDesign.asset,
-      exportOptions: session.customExportOptions,
-    });
 
-    let sBg = "#F4F1E9", sBorder = "#E7E2D6", sIcon = "…", sTitle = "Checking…", sBody = "Checking whether the text fits inside your boxes.";
-    if (canContinue && hasWarnings) { sBg = "#FBEFCB"; sBorder = "#F0DFA8"; sIcon = "!"; sTitle = "Looks okay"; sBody = "Some text may be adjusted, but you can still continue."; }
-    else if (canContinue) { sBg = "#EEF8F1"; sBorder = "#CDEBD9"; sIcon = "✓"; sTitle = "Looks good"; sBody = "The text fits and the finished size is set."; }
-    else if (preflightStatus === "blocked") { sBg = "#FBEEEA"; sBorder = "#F2C9BD"; sIcon = "×"; sTitle = "Fix before export"; sBody = "Some text does not fit yet. Make the field box bigger or adjust the text style."; }
-    else if (preflightStatus === "needsOutputSize") { sIcon = "↕"; sTitle = "Choose a finished size"; sBody = "Pick the size each one should be when printed."; }
+    const itemWidthIn = session.customExportOptions.customItemWidth;
+    const itemHeightIn = session.customExportOptions.customItemHeight;
+    const aspectMismatch = aspectRatiosDiffer(itemWidthIn, itemHeightIn, asset);
+    const dpi =
+      typeof itemWidthIn === "number" && typeof itemHeightIn === "number"
+        ? assessPrintResolution({
+            intrinsicWidth: asset.intrinsicWidth,
+            intrinsicHeight: asset.intrinsicHeight,
+            printWidthIn: itemWidthIn,
+            printHeightIn: itemHeightIn,
+          })
+        : null;
+    const issueCount = session.customPreflightResult?.issues.length ?? 0;
+
+    let sBg = "#F4F1E9", sBorder = "#E7E2D6", sAccent = "#1A1916", sIcon = "…", sTitle = "Checking…", sBody = "Checking whether the text fits inside your boxes.";
+    if (canContinue && hasWarnings) { sBg = "#FBEFCB"; sBorder = "#F0DFA8"; sAccent = "#8A6A12"; sIcon = "!"; sTitle = "Looks okay — minor warnings"; sBody = "Some text may be shrunk or adjusted to fit, but you can still continue."; }
+    else if (canContinue) { sBg = "#EEF8F1"; sBorder = "#CDEBD9"; sAccent = "#2E8B57"; sIcon = "✓"; sTitle = "Looks good"; sBody = "The text fits and the finished size is set. You're ready to continue."; }
+    else if (preflightStatus === "blocked") { sBg = "#FBEEEA"; sBorder = "#F2C9BD"; sAccent = "#B5482E"; sIcon = "×"; sTitle = "Fix before export"; sBody = `Some text does not fit yet${issueCount > 0 ? ` (${issueCount} ${issueCount === 1 ? "issue" : "issues"} below)` : ""}. Make the field box bigger, shrink the text, or change the overflow style.`; }
+    else if (preflightStatus === "needsOutputSize") { sIcon = "↕"; sBg = "#FBEFCB"; sBorder = "#F0DFA8"; sAccent = "#8A6A12"; sTitle = "Choose a finished size"; sBody = "Pick the size each one should be when printed, just below."; }
 
     return (
       <div>
         <div style={STEP_LABEL_STYLE}>Step 5 · Preview</div>
         <h2 style={H2}>Does this look right?</h2>
-        <p style={{ ...SUBTEXT, maxWidth: 680 }}>Check a row and confirm the finished size so we can catch text that may not fit.</p>
-        <HelpfulTip style={{ maxWidth: 720, marginBottom: 16 }}>
-          The size here is the final printed size, not the image pixel size. Certificates are usually 11 x 8.5 inches; badges and cards are usually smaller.
-        </HelpfulTip>
+        <p style={{ ...SUBTEXT, maxWidth: 680 }}>Confirm the finished size and check that the text fits before you export.</p>
 
-        <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 420px", gap: 24, alignItems: "start" }}>
-          <div style={{ display: "grid", gap: 16 }}>
+        {/* Full-width status banner pinned to the top so fit errors can't be missed. */}
+        <div data-rsticky style={{ position: "sticky", top: 118, zIndex: 20, marginBottom: 18 }}>
+          <div style={{ background: sBg, border: `1px solid ${sBorder}`, borderLeft: `5px solid ${sAccent}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", boxShadow: "0 14px 30px -22px rgba(26,25,22,0.55)" }}>
+            <span style={{ width: 36, height: 36, borderRadius: 10, background: sAccent, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, flexShrink: 0 }}>{sIcon}</span>
+            <div style={{ flex: "1 1 240px", minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: sAccent }}>{sTitle}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.45, marginTop: 2, color: "#4A463E" }}>{sBody}</div>
+            </div>
+            <div style={{ display: "flex", gap: 9, flexShrink: 0 }}>
+              <Button type="button" variant="secondary" onClick={() => goToStep("mapping")}>
+                ← Back
+              </Button>
+              <Button
+                type="button"
+                variant={hasWarnings ? "brand" : "primary"}
+                disabled={!canContinue}
+                onClick={handleContinueToExport}
+              >
+                {hasWarnings ? "Continue with warnings →" : "Continue to export setup →"}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Finished size — above the preview so the question is seen first. */}
+        <section style={{ background: "#fff", border: "1px solid #E7E2D6", borderRadius: 18, padding: 20, marginBottom: 18 }}>
+          <div style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#9A9486", textTransform: "uppercase", letterSpacing: "0.1em" }}>Finished size</div>
+          <h3 style={{ fontSize: 21, fontWeight: 800, margin: "5px 0 6px", letterSpacing: "-0.01em" }}>What size should each one be when printed?</h3>
+          <p style={{ fontSize: 13.5, color: "#6E6A61", lineHeight: 1.5, margin: "0 0 14px", maxWidth: 760 }}>
+            This is the real size on paper or card — the same as the page or card you would print and hand out. It is not the image&apos;s pixel size. If you are unsure, choose the size of the paper or card you plan to hand out.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+            {FINISHED_SIZE_PRESETS.map((preset) => {
+              const selected = preset.id === "custom"
+                ? customSizeSelected
+                : !customSizeSelected && selectedSizePresetId === preset.id;
+              const recommended = preset.id === recommendedSizePresetId;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleFinishedSizePresetChange(preset)}
+                  style={{
+                    textAlign: "left",
+                    border: `1.5px solid ${selected ? "#F2B01E" : "#E7E2D6"}`,
+                    background: selected ? "#FFFAEB" : "#FFFFFF",
+                    borderRadius: 12,
+                    padding: 13,
+                    cursor: "pointer",
+                    boxShadow: selected ? "0 8px 18px -14px rgba(242,176,30,0.7)" : "none",
+                  }}
+                >
+                  <span style={{ display: "block", fontSize: 14, fontWeight: 800, color: "#1A1916" }}>{preset.label}</span>
+                  <span style={{ display: "block", fontSize: 12.5, color: "#6E6A61", marginTop: 4 }}>{preset.hint}</span>
+                  {recommended ? (
+                    <span style={{ display: "inline-block", marginTop: 8, ...MONO, fontSize: 10, fontWeight: 700, color: "#8A6A12", background: "#FBEFCB", borderRadius: 5, padding: "3px 6px" }}>
+                      Recommended
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          {customSizeSelected ? (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, border: "1px solid #E7E2D6", background: lockAspectRatio ? "#FFFAEB" : "#FFFFFF", borderRadius: 12, padding: "10px 13px" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, borderRadius: 9, background: lockAspectRatio ? "#F2B01E" : "#F4F1E9", color: lockAspectRatio ? "#1A1916" : "#8A857A", flexShrink: 0 }}>
+                  {lockAspectRatio ? <Lock size={17} /> : <LockOpen size={17} />}
+                </span>
+                <label htmlFor="aspect-lock" style={{ flex: 1, minWidth: 0, cursor: "pointer" }}>
+                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 700, color: "#1A1916" }}>Lock to the design&apos;s shape</span>
+                  <span style={{ display: "block", fontSize: 12, color: "#6E6A61", marginTop: 1 }}>Keeps width and height proportional so the design isn&apos;t stretched.</span>
+                </label>
+                <Switch
+                  id="aspect-lock"
+                  checked={lockAspectRatio}
+                  onCheckedChange={handleToggleAspectLock}
+                  aria-label="Lock to the design's shape"
+                />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 700, color: "#6E6A61" }}>
+                  Width (in)
+                  <Input
+                    type="number"
+                    min={0.5}
+                    step={0.125}
+                    value={session.customExportOptions.customItemWidth ?? ""}
+                    onChange={(event) => handleFinishedDimensionChange("width", event.target.value)}
+                  />
+                </label>
+                <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 700, color: "#6E6A61" }}>
+                  Height (in){lockAspectRatio ? <span style={{ fontWeight: 600, color: "#9A9486" }}> · auto</span> : null}
+                  <Input
+                    type="number"
+                    min={0.5}
+                    step={0.125}
+                    value={session.customExportOptions.customItemHeight ?? ""}
+                    onChange={(event) => handleFinishedDimensionChange("height", event.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+          ) : null}
+
+          {aspectMismatch && typeof itemWidthIn === "number" && typeof itemHeightIn === "number" ? (
+            <div style={{ marginTop: 14, border: "1px solid #F0DFA8", background: "#FFFAEB", borderRadius: 11, padding: "11px 13px", color: "#7A5E12", fontSize: 13, lineHeight: 1.5 }}>
+              <strong>Heads up — this size is a different shape than your design.</strong>{" "}
+              Your design is {Math.round(asset.intrinsicWidth)} × {Math.round(asset.intrinsicHeight)} px, but {formatInches(itemWidthIn)} × {formatInches(itemHeightIn)} in is a different proportion, so the background will be stretched to fill it and may look distorted.{" "}
+              {customSizeSelected ? "Turn on “Lock to the design’s shape” above to keep it proportional." : "Pick the Recommended size or a Custom size that matches your design’s shape."}
+            </div>
+          ) : null}
+
+          {dpi ? (
+            dpi.level === "low" ? (
+              <div style={{ marginTop: 14, border: "1px solid #F2C9BD", background: "#FBEEEA", borderRadius: 11, padding: "11px 13px", color: "#7A2E1A", fontSize: 13, lineHeight: 1.5 }}>
+                <strong>⚠ At {formatInches(itemWidthIn ?? 0)} × {formatInches(itemHeightIn ?? 0)} in this is only about {Math.round(dpi.effectiveDpi)} DPI — it will most likely look blurry in print.</strong>{" "}
+                A sharp print needs at least {ACCEPTABLE_PRINT_DPI} DPI. For this size, re-export your design at least{" "}
+                <strong>{dpi.minWidthPxForAcceptable} × {dpi.minHeightPxForAcceptable} px</strong>{" "}
+                ({dpi.idealWidthPx} × {dpi.idealHeightPx} px for crisp {IDEAL_PRINT_DPI} DPI), or choose a smaller finished size.
+              </div>
+            ) : dpi.level === "acceptable" ? (
+              <div style={{ marginTop: 14, border: "1px solid #F0DFA8", background: "#FFFAEB", borderRadius: 11, padding: "11px 13px", color: "#7A5E12", fontSize: 13, lineHeight: 1.5 }}>
+                <strong>About {Math.round(dpi.effectiveDpi)} DPI at this size</strong> — okay, but not crisp. For the sharpest print at this size, use {dpi.idealWidthPx} × {dpi.idealHeightPx} px ({IDEAL_PRINT_DPI} DPI).
+              </div>
+            ) : (
+              <div style={{ marginTop: 14, border: "1px solid #CDEBD9", background: "#EEF8F1", borderRadius: 11, padding: "11px 13px", color: "#2E5E43", fontSize: 13, lineHeight: 1.5 }}>
+                ✓ <strong>About {Math.round(dpi.effectiveDpi)} DPI at this size</strong> — a good resolution for sharp print output.
+              </div>
+            )
+          ) : null}
+        </section>
+
+        <div data-rcol style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 24, alignItems: "start" }}>
+          <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
             <CustomDesignReviewPreview
               file={customDesign.file}
-              asset={customDesign.asset}
+              asset={asset}
               boxes={customDesign.fieldBoxes}
               row={previewRow}
               rowIndex={session.previewRowIndex}
@@ -1725,149 +2020,18 @@ export function BatchPdfClient() {
             <HelpfulTip>
               Use the row arrows above to test a few real people before continuing — long names are where text usually overflows.
             </HelpfulTip>
-
-            <section style={{ background: "#fff", border: "1px solid #E7E2D6", borderRadius: 18, padding: 18 }}>
-              <div style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "#9A9486", textTransform: "uppercase", letterSpacing: "0.1em" }}>Finished size</div>
-              <h3 style={{ fontSize: 20, fontWeight: 800, margin: "5px 0 6px", letterSpacing: "-0.01em" }}>What size should each one be when printed?</h3>
-              <p style={{ fontSize: 13.5, color: "#6E6A61", lineHeight: 1.5, margin: "0 0 14px" }}>
-                This is the real size on paper or card — the same as the page or card you would print and hand out. It is not the image&apos;s pixel size.
-              </p>
-              <HelpfulTip style={{ marginBottom: 14 }}>
-                If you are unsure, choose the size of the paper or card you plan to hand out.
-              </HelpfulTip>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-                {FINISHED_SIZE_PRESETS.map((preset) => {
-                  const selected = preset.id === "custom"
-                    ? customSizeSelected
-                    : !customSizeSelected && selectedSizePresetId === preset.id;
-                  const recommended = preset.id === recommendedSizePresetId;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => handleFinishedSizePresetChange(preset)}
-                      style={{
-                        textAlign: "left",
-                        border: `1.5px solid ${selected ? "#F2B01E" : "#E7E2D6"}`,
-                        background: selected ? "#FFFAEB" : "#FFFFFF",
-                        borderRadius: 12,
-                        padding: 13,
-                        cursor: "pointer",
-                        boxShadow: selected ? "0 8px 18px -14px rgba(242,176,30,0.7)" : "none",
-                      }}
-                    >
-                      <span style={{ display: "block", fontSize: 14, fontWeight: 800, color: "#1A1916" }}>{preset.label}</span>
-                      <span style={{ display: "block", fontSize: 12.5, color: "#6E6A61", marginTop: 4 }}>{preset.hint}</span>
-                      {recommended ? (
-                        <span style={{ display: "inline-block", marginTop: 8, ...MONO, fontSize: 10, fontWeight: 700, color: "#8A6A12", background: "#FBEFCB", borderRadius: 5, padding: "3px 6px" }}>
-                          Recommended
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {customSizeSelected ? (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
-                  <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 700, color: "#6E6A61" }}>
-                    Width (in)
-                    <input
-                      type="number"
-                      min={0.5}
-                      step={0.125}
-                      value={session.customExportOptions.customItemWidth ?? ""}
-                      onChange={(event) =>
-                        handleCustomExportOptionsChange({
-                          ...session.customExportOptions,
-                          itemSizeMode: "custom",
-                          unit: "in",
-                          customItemWidth: event.target.value ? Number.parseFloat(event.target.value) : undefined,
-                        })
-                      }
-                      style={{ border: "1px solid #DAD3C4", borderRadius: 9, padding: "10px 11px", fontSize: 14 }}
-                    />
-                  </label>
-                  <label style={{ display: "grid", gap: 5, fontSize: 12, fontWeight: 700, color: "#6E6A61" }}>
-                    Height (in)
-                    <input
-                      type="number"
-                      min={0.5}
-                      step={0.125}
-                      value={session.customExportOptions.customItemHeight ?? ""}
-                      onChange={(event) =>
-                        handleCustomExportOptionsChange({
-                          ...session.customExportOptions,
-                          itemSizeMode: "custom",
-                          unit: "in",
-                          customItemHeight: event.target.value ? Number.parseFloat(event.target.value) : undefined,
-                        })
-                      }
-                      style={{ border: "1px solid #DAD3C4", borderRadius: 9, padding: "10px 11px", fontSize: 14 }}
-                    />
-                  </label>
-                </div>
-              ) : null}
-
-              {imageResolution ? (
-                <div
-                  style={{
-                    marginTop: 14,
-                    border: `1px solid ${imageResolution.effectiveDpi < 150 ? "#F0DFA8" : "#CDEBD9"}`,
-                    background: imageResolution.effectiveDpi < 150 ? "#FFFAEB" : "#EEF8F1",
-                    borderRadius: 11,
-                    padding: "11px 12px",
-                    color: "#4A463E",
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  <strong>{Math.round(imageResolution.effectiveDpi)} DPI at this size.</strong>{" "}
-                  {imageResolution.effectiveDpi < 150 ? (
-                    <>
-                      The PDF uses the image&apos;s full pixel dimensions, but this may look soft in print. For
-                      approximately {imageResolution.targetDpi} DPI, upload at least{" "}
-                      {imageResolution.targetWidthPx} × {imageResolution.targetHeightPx} px or
-                      choose a smaller finished size.
-                    </>
-                  ) : (
-                    <>The uploaded image has a suitable resolution for this finished size.</>
-                  )}
-                </div>
-              ) : null}
-            </section>
           </div>
 
-          <aside data-raside style={{ position: "sticky", top: 130, display: "grid", gap: 14 }}>
-            <div style={{ background: sBg, border: `1px solid ${sBorder}`, borderRadius: 16, padding: 18 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 32, height: 32, borderRadius: 9, background: "#fff", border: `1px solid ${sBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{sIcon}</span>
-                <span style={{ fontSize: 16, fontWeight: 800 }}>{sTitle}</span>
-              </div>
-              <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "12px 0 0", color: "#4A463E" }}>{sBody}</p>
-            </div>
-
+          <aside data-raside style={{ position: "sticky", top: 200, display: "grid", gap: 14 }}>
             <CustomPreflightPanel
-              key={`${customDesign.asset.fileName}-${customDesign.asset.sizeBytes}`}
-              design={customDesign.asset}
+              key={`${asset.fileName}-${asset.sizeBytes}`}
+              design={asset}
               rows={csv.rows}
               csvHeaders={csv.headers}
               fieldBoxes={customDesign.fieldBoxes}
               exportOptions={session.customExportOptions}
               onPreflightResultChange={handleCustomPreflightResultChange}
             />
-
-            <button
-              type="button"
-              disabled={!canContinue}
-              onClick={handleContinueToExport}
-              style={{ width: "100%", background: canContinue ? (hasWarnings ? "#F2B01E" : "#1A1916") : "#E7E2D6", color: canContinue ? (hasWarnings ? "#1A1916" : "#fff") : "#9A9486", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: canContinue ? "pointer" : "not-allowed", boxShadow: canContinue && hasWarnings ? "0 2px 0 #C98F11" : "none" }}
-            >
-              {hasWarnings ? "Continue with warnings →" : "Continue to export setup →"}
-            </button>
-            <button type="button" onClick={() => goToStep("mapping")} style={{ width: "100%", marginTop: -4, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              ← Back to placing fields
-            </button>
           </aside>
         </div>
       </div>
@@ -1882,6 +2046,7 @@ export function BatchPdfClient() {
     const canExport = isCustomExportReady;
     const statusBg = canExport ? "#EEF8F1" : "#FBEEEA";
     const statusBorder = canExport ? "#CDEBD9" : "#F2C9BD";
+    const statusAccent = canExport ? "#2E8B57" : "#B5482E";
     const statusIcon = canExport ? "✓" : "×";
     const statusTitle = canExport ? "Ready to generate" : "Adjust export setup";
     let statusBody = "Choose how the final PDFs should be arranged.";
@@ -1930,10 +2095,10 @@ export function BatchPdfClient() {
           </div>
 
           <aside data-raside style={{ position: "sticky", top: 130 }}>
-            <div style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+            <div style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderLeft: `5px solid ${statusAccent}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 32, height: 32, borderRadius: 9, background: "#fff", border: `1px solid ${statusBorder}`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{statusIcon}</span>
-                <span style={{ fontSize: 16, fontWeight: 800 }}>{statusTitle}</span>
+                <span style={{ width: 32, height: 32, borderRadius: 9, background: statusAccent, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 800, flexShrink: 0 }}>{statusIcon}</span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: statusAccent }}>{statusTitle}</span>
               </div>
               <p style={{ fontSize: 13.5, lineHeight: 1.5, margin: "12px 0 0", color: "#4A463E" }}>{statusBody}</p>
             </div>
@@ -1941,17 +2106,12 @@ export function BatchPdfClient() {
               The outline preview is a quick check for spacing. It does not need to render every name to show whether the sheet layout fits.
             </HelpfulTip>
 
-            <button
-              type="button"
-              disabled={!canExport}
-              onClick={handleContinueToFinalExport}
-              style={{ width: "100%", background: canExport ? "#1A1916" : "#E7E2D6", color: canExport ? "#fff" : "#9A9486", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 11, cursor: canExport ? "pointer" : "not-allowed" }}
-            >
+            <Button type="button" variant="primary" fullWidth disabled={!canExport} onClick={handleContinueToFinalExport}>
               Continue to generate →
-            </button>
-            <button type="button" onClick={() => goToStep("preview")} style={{ width: "100%", marginTop: 10, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+            </Button>
+            <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep("preview")} className="mt-2.5">
               ← Back to preview
-            </button>
+            </Button>
           </aside>
         </div>
       </div>
@@ -2008,10 +2168,10 @@ export function BatchPdfClient() {
                   This batch generates up to <strong>{BATCH_PDF_LIMITS.freeExportRows} PDFs</strong> and packs them into a single ZIP.
                 </div>
               </div>
-              <button type="button" onClick={doExport} style={{ width: "100%", marginTop: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 9, background: "#F2B01E", color: "#1A1916", fontWeight: 700, fontSize: 16, padding: 15, border: "none", borderRadius: 12, cursor: "pointer", boxShadow: "0 2px 0 #C98F11, 0 12px 26px -10px rgba(242,176,30,0.6)" }}>
+              <Button type="button" variant="brand" size="lg" fullWidth onClick={doExport} className="mt-4.5 text-base shadow-[0_2px_0_var(--color-brand-strong),0_12px_26px_-10px_rgba(242,176,30,0.6)]">
                 {isStarterMode ? "Generate free ZIP ↓" : customButtonLabel}
-              </button>
-              <button type="button" onClick={() => goToStep(isCustomMode ? "export-options" : "preview")} style={{ width: "100%", marginTop: 8, background: "transparent", border: "none", color: "#8A857A", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>← Back</button>
+              </Button>
+              <Button type="button" variant="ghost" size="sm" fullWidth onClick={() => goToStep(isCustomMode ? "export-options" : "preview")} className="mt-2">← Back</Button>
             </div>
           )}
 
@@ -2026,8 +2186,8 @@ export function BatchPdfClient() {
               <div style={{ fontSize: 14, color: "#6E6A61", marginTop: 6 }}>
                 {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} packed into <span style={MONO}>{zipName}</span>
               </div>
-              <button type="button" onClick={doExport} style={{ width: "100%", marginTop: 20, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 9, background: "#1A1916", color: "#fff", fontWeight: 700, fontSize: 16, padding: 15, border: "none", borderRadius: 12, cursor: "pointer" }}>↓ Download again</button>
-              <button type="button" onClick={() => router.push("/")} style={{ width: "100%", marginTop: 8, background: "#fff", border: "1.5px solid #DAD3C4", color: "#1A1916", fontWeight: 700, fontSize: 14, padding: 12, borderRadius: 11, cursor: "pointer" }}>Start a new batch</button>
+              <Button type="button" variant="primary" size="lg" fullWidth onClick={doExport} className="mt-5 text-base">↓ Download again</Button>
+              <Button type="button" variant="secondary" fullWidth onClick={() => router.push("/")} className="mt-2">Start a new batch</Button>
             </div>
           )}
 
@@ -2036,7 +2196,7 @@ export function BatchPdfClient() {
               <div style={{ width: 56, height: 56, borderRadius: 16, background: "#FBEEEA", color: "#B5482E", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 26, marginBottom: 16, border: "1px solid #F2C9BD" }}>⚠</div>
               <div style={{ fontSize: 18, fontWeight: 800 }}>Something went wrong</div>
               <div style={{ fontSize: 14, color: "#6E6A61", marginTop: 6, lineHeight: 1.5 }}>{exportError ?? "We couldn't finish generating your PDFs. Please try again."}</div>
-              <button type="button" onClick={doExport} style={{ width: "100%", marginTop: 20, background: "#F2B01E", color: "#1A1916", fontWeight: 700, fontSize: 15, padding: 14, border: "none", borderRadius: 12, cursor: "pointer", boxShadow: "0 2px 0 #C98F11" }}>Try again</button>
+              <Button type="button" variant="brand" size="lg" fullWidth onClick={doExport} className="mt-5">Try again</Button>
             </div>
           )}
         </div>

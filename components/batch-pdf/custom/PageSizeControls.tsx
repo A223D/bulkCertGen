@@ -1,8 +1,14 @@
 "use client";
 
-import { ControlGroup, NumberField, SegmentedControl, controlLabelClass, inputClass } from "./exportControls";
+import { ControlGroup, NumberField, SegmentedControl, controlLabelClass } from "./exportControls";
+import { Select } from "@/components/ui/select";
 import { getCommonPageSizes } from "@/lib/batch-pdf/custom/export-options";
 import type { ExportOptions, MeasurementUnit, PageSizeKey } from "@/lib/batch-pdf/custom/types";
+
+const UNIT_OPTIONS = [
+  { value: "in", label: "in" },
+  { value: "mm", label: "mm" },
+];
 
 const PAGE_SIZE_OPTIONS: Array<{ key: PageSizeKey; label: string }> = [
   { key: "sameAsDesign", label: "Same as design" },
@@ -21,18 +27,12 @@ export function PageSizeControls({
   return (
     <div className="space-y-3">
       <ControlGroup label="Page size">
-        <select
+        <Select
           aria-label="Page size"
           value={options.pageSize}
-          onChange={(event) => onChange({ pageSize: event.target.value as PageSizeKey })}
-          className={inputClass}
-        >
-          {PAGE_SIZE_OPTIONS.map((option) => (
-            <option key={option.key} value={option.key}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onValueChange={(value) => onChange({ pageSize: value as PageSizeKey })}
+          options={PAGE_SIZE_OPTIONS.map((option) => ({ value: option.key, label: option.label }))}
+        />
       </ControlGroup>
 
       <ControlGroup label="Orientation" hint="Auto picks the orientation that needs the fewest pages.">
@@ -68,15 +68,13 @@ export function PageSizeControls({
               step={0.125}
               placeholder="Height"
             />
-            <select
+            <Select
               aria-label="Measurement unit"
               value={options.unit}
-              onChange={(event) => onChange({ unit: event.target.value as MeasurementUnit })}
-              className="rounded border border-line bg-panel px-2 py-1 text-sm"
-            >
-              <option value="in">in</option>
-              <option value="mm">mm</option>
-            </select>
+              onValueChange={(value) => onChange({ unit: value as MeasurementUnit })}
+              options={UNIT_OPTIONS}
+              className="w-20"
+            />
           </div>
         </div>
       ) : null}

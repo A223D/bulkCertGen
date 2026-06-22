@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Plus, Type } from "lucide-react";
 import { CustomDesignStage } from "./CustomDesignStage";
 import { FieldBoxInspector } from "./FieldBoxInspector";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import {
   addFieldBox,
   createDefaultCsvFieldBox,
   createDefaultStaticTextBox,
-  duplicateFieldBox,
   getFieldBoxById,
   isCustomFieldPlacementReady,
   removeFieldBox,
@@ -42,7 +44,7 @@ export function CustomFieldPlacementEditor({
   onBoxesChange,
   onSelectedBoxChange,
 }: CustomFieldPlacementEditorProps) {
-  const [selectedColumn, setSelectedColumn] = useState(csvHeaders[0] ?? "");
+  const [selectedColumn, setSelectedColumn] = useState("");
   const [actionErrors, setActionErrors] = useState<BatchPdfError[]>([]);
   const selectedBox = getFieldBoxById(boxes, selectedBoxId);
   const validation = useMemo(
@@ -54,7 +56,7 @@ export function CustomFieldPlacementEditor({
   const hasCsvHeaders = csvHeaders.length > 0;
   const safeSelectedColumn = csvHeaders.includes(selectedColumn)
     ? selectedColumn
-    : csvHeaders[0] ?? "";
+    : "";
   const summaryErrors = [
     ...(!hasCsvHeaders
       ? [
@@ -113,6 +115,7 @@ export function CustomFieldPlacementEditor({
       addFieldBox({ boxes, box, csvHeaders }),
       box.id,
     );
+    setSelectedColumn("");
   }
 
   function handleAddStaticText() {
@@ -148,19 +151,6 @@ export function CustomFieldPlacementEditor({
     onSelectedBoxChange(nextBoxes[0]?.id ?? null);
   }
 
-  function handleDuplicateBox(boxId: string) {
-    const result = duplicateFieldBox({ boxes, boxId, csvHeaders });
-
-    if (!result.ok) {
-      setActionErrors(result.errors);
-      return;
-    }
-
-    setActionErrors([]);
-    onBoxesChange(result.value);
-    onSelectedBoxChange(result.value[result.value.length - 1]?.id ?? null);
-  }
-
   return (
     <section
       className="min-w-0"
@@ -181,51 +171,52 @@ export function CustomFieldPlacementEditor({
               selectedBoxId={selectedBoxId}
               onSelectBox={onSelectedBoxChange}
               onUpdateBoxRect={handleUpdateBoxRect}
+              onDeleteBox={handleDeleteBox}
             />
           </div>
 
           <aside className="min-h-0 space-y-3 xl:sticky xl:top-28 xl:max-h-[calc(100vh-12rem)] xl:overflow-y-auto xl:pr-1">
-            <div className="rounded-lg border border-line bg-muted p-4">
+            <div className="rounded-xl border border-line bg-muted p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 Add a field
               </p>
               <label className="mt-3 block space-y-1 text-sm font-medium text-ink">
                 <span>Spreadsheet column</span>
-                <select
+                <Select
                   value={safeSelectedColumn}
-                  onChange={(event) => setSelectedColumn(event.target.value)}
+                  onValueChange={setSelectedColumn}
+                  options={csvHeaders.map((header) => ({ value: header, label: header }))}
+                  placeholder="Select field"
                   disabled={!hasCsvHeaders}
-                  className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-disabled disabled:text-disabled-foreground"
-                >
-                  {csvHeaders.map((header) => (
-                    <option key={header} value={header}>
-                      {header}
-                    </option>
-                  ))}
-                </select>
+                  aria-label="Spreadsheet column"
+                />
               </label>
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                fullWidth
                 onClick={handleAddCsvField}
-                disabled={!hasCsvHeaders}
-                className="mt-3 w-full rounded-lg bg-ink px-3 py-2 text-sm font-medium text-panel hover:bg-accent disabled:cursor-not-allowed disabled:bg-disabled disabled:text-disabled-foreground"
+                disabled={!hasCsvHeaders || !safeSelectedColumn}
+                className="mt-3"
               >
-                Add this field
-              </button>
-              <button
+                <Plus className="h-4 w-4" /> Add this field
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
+                fullWidth
                 onClick={handleAddStaticText}
-                className="mt-2 w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm font-medium hover:border-accent hover:text-accent"
+                className="mt-2"
               >
-                Add custom text
-              </button>
-              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
+                <Type className="h-4 w-4" /> Add custom text
+              </Button>
+              <p className="mt-3 rounded-lg border border-warning-line bg-warning-soft px-3 py-2 text-sm leading-6 text-warning">
                 Tip: add one field, place it, then adjust the style before adding the next one.
               </p>
             </div>
 
             {boxes.length > 0 ? (
-              <div className="rounded-lg border border-line bg-panel p-3">
+              <div className="rounded-xl border border-line bg-panel p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   Fields on design
                 </p>
@@ -257,7 +248,6 @@ export function CustomFieldPlacementEditor({
               csvHeaders={csvHeaders}
               onUpdate={handleUpdateBox}
               onDelete={handleDeleteBox}
-              onDuplicate={handleDuplicateBox}
             />
 
             {summaryErrors.length > 0 ? (
@@ -266,14 +256,14 @@ export function CustomFieldPlacementEditor({
                   <p
                     key={`${error.code}-${error.fieldKey ?? "general"}`}
                     role="alert"
-                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                    className="rounded-lg border border-danger-line bg-danger-soft px-3 py-2 text-sm text-danger"
                   >
                     {error.message}
                   </p>
                 ))}
               </div>
             ) : (
-              <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+              <p className="rounded-lg border border-success-line bg-success-soft px-3 py-2 text-sm text-success">
                 {placementReady ? "Ready to check." : "Add at least one field to continue."}
               </p>
             )}

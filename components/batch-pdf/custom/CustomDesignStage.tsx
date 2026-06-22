@@ -10,6 +10,7 @@ import {
   nudgeNormalizedRect,
 } from "@/lib/batch-pdf/custom/editor-geometry";
 import { clampNormalizedRect } from "@/lib/batch-pdf/custom/coordinates";
+import { cssFontStack } from "@/lib/batch-pdf/custom/fonts/catalog";
 import type {
   CustomFieldBox,
   DesignAsset,
@@ -24,6 +25,7 @@ type CustomDesignStageProps = {
   selectedBoxId: string | null;
   onSelectBox: (boxId: string | null) => void;
   onUpdateBoxRect: (boxId: string, rect: NormalizedRect) => void;
+  onDeleteBox?: (boxId: string) => void;
 };
 
 type StageSize = {
@@ -90,17 +92,17 @@ const resizeHandleStyles: HandleStyles = {
 };
 
 function boxLabel(box: CustomFieldBox): string {
+  // Static-text boxes preview the actual text the user typed; CSV boxes show the
+  // column name as a stand-in for the per-row value.
+  if (box.source.type === "staticText") {
+    return box.source.value.trim() || box.label.trim() || "Custom text";
+  }
+
   if (box.label.trim()) {
     return box.label;
   }
 
-  return box.source.type === "csvColumn" ? box.source.column : "Static text";
-}
-
-function cssFontFamily(fontFamily: CustomFieldBox["style"]["fontFamily"]): string {
-  if (fontFamily === "Times") return "Times New Roman, serif";
-  if (fontFamily === "Courier") return "Courier New, monospace";
-  return "Arial, Helvetica, sans-serif";
+  return box.source.column;
 }
 
 function horizontalPosition(align: CustomFieldBox["style"]["align"]): string {
@@ -127,6 +129,7 @@ export function CustomDesignStage({
   selectedBoxId,
   onSelectBox,
   onUpdateBoxRect,
+  onDeleteBox,
 }: CustomDesignStageProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stageSize, setStageSize] = useState<StageSize>({ width: 0, height: 0 });
@@ -200,6 +203,13 @@ export function CustomDesignStage({
     box: CustomFieldBox,
     event: React.KeyboardEvent<HTMLDivElement>,
   ) {
+    if ((event.key === "Delete" || event.key === "Backspace") && onDeleteBox) {
+      event.preventDefault();
+      event.stopPropagation();
+      onDeleteBox(box.id);
+      return;
+    }
+
     if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
       return;
     }
@@ -335,7 +345,7 @@ export function CustomDesignStage({
                         alignItems: verticalPosition(box.style.verticalAlign),
                         justifyContent: horizontalPosition(box.style.align),
                         textAlign: box.style.align,
-                        fontFamily: cssFontFamily(box.style.fontFamily),
+                        fontFamily: cssFontStack(box.style.fontFamily),
                         fontWeight: box.style.fontWeight === "bold" ? 700 : 400,
                         fontSize: `${Math.max(9, Math.min(box.style.fontSize, 28))}px`,
                         lineHeight: box.style.lineHeight,
@@ -361,7 +371,7 @@ export function CustomDesignStage({
       </div>
 
       <p className="text-center text-xs leading-5 text-muted-foreground">
-        Drag a field to move it. Select it, then drag any handle to resize. Arrow keys nudge; hold Shift for a bigger step.
+        Drag a field to move it. Select it, then drag any handle to resize. Arrow keys nudge (hold Shift for a bigger step); press Delete to remove the selected field.
       </p>
     </div>
   );

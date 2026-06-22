@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { parseCsvText, validateCsvFile } from "@/lib/batch-pdf/csv";
 import { saveSessionCsv } from "@/lib/batch-pdf/session-csv";
 import type { CsvParseResult } from "@/lib/batch-pdf/types";
@@ -119,7 +120,7 @@ export function HeroCsvCard() {
         boxShadow: "0 30px 60px -34px rgba(26,25,22,0.32), 0 2px 0 rgba(26,25,22,0.02)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em" }}>Start with your spreadsheet</div>
         <span
           style={{
@@ -132,6 +133,7 @@ export function HeroCsvCard() {
             background: "#FBEFCB",
             padding: "4px 8px",
             borderRadius: 7,
+            flexShrink: 0,
           }}
         >
           Step 1 of 6
@@ -197,46 +199,20 @@ export function HeroCsvCard() {
               One row per certificate, badge, card, or label · up to 2&nbsp;MB
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button
+          <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <Button
               type="button"
+              variant="brand"
+              size="lg"
+              fullWidth
               onClick={() => inputRef.current?.click()}
-              style={{
-                flex: 1,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                background: "#F2B01E",
-                color: "#1A1916",
-                fontWeight: 700,
-                fontSize: 15,
-                padding: "13px 18px",
-                border: "none",
-                borderRadius: 11,
-                cursor: "pointer",
-                boxShadow: "0 2px 0 #C98F11, 0 10px 22px -10px rgba(242,176,30,0.6)",
-              }}
+              className="flex-1 shadow-[0_2px_0_var(--color-brand-strong),0_10px_22px_-10px_rgba(242,176,30,0.6)]"
             >
               Upload CSV
-            </button>
-            <button
-              type="button"
-              onClick={loadSample}
-              style={{
-                flexShrink: 0,
-                background: "#FFFFFF",
-                color: "#1A1916",
-                fontWeight: 700,
-                fontSize: 15,
-                padding: "13px 18px",
-                border: "1.5px solid #DAD3C4",
-                borderRadius: 11,
-                cursor: "pointer",
-              }}
-            >
+            </Button>
+            <Button type="button" variant="secondary" size="lg" onClick={loadSample}>
               Try sample CSV
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -385,45 +361,12 @@ export function HeroCsvCard() {
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={continueToWizard}
-            style={{
-              width: "100%",
-              marginTop: 16,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 9,
-              background: "#1A1916",
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: 15,
-              padding: "14px 18px",
-              border: "none",
-              borderRadius: 11,
-              cursor: "pointer",
-            }}
-          >
+          <Button type="button" variant="primary" size="lg" fullWidth onClick={continueToWizard} className="mt-4">
             Continue — choose a design <span>→</span>
-          </button>
-          <button
-            type="button"
-            onClick={reset}
-            style={{
-              width: "100%",
-              marginTop: 8,
-              background: "transparent",
-              color: "#8A857A",
-              fontWeight: 600,
-              fontSize: 13,
-              padding: 6,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
+          </Button>
+          <Button type="button" variant="ghost" size="sm" fullWidth onClick={reset} className="mt-2">
             Use a different file
-          </button>
+          </Button>
         </div>
       )}
 
@@ -452,23 +395,9 @@ export function HeroCsvCard() {
           <div style={{ fontSize: 13.5, color: "#9A5440", marginTop: 8, lineHeight: 1.5 }}>
             {errorMsg}
           </div>
-          <button
-            type="button"
-            onClick={reset}
-            style={{
-              marginTop: 14,
-              background: "#1A1916",
-              color: "#fff",
-              fontWeight: 700,
-              fontSize: 14,
-              padding: "11px 18px",
-              border: "none",
-              borderRadius: 10,
-              cursor: "pointer",
-            }}
-          >
+          <Button type="button" variant="primary" onClick={reset} className="mt-3.5">
             Try another file
-          </button>
+          </Button>
         </div>
       )}
 

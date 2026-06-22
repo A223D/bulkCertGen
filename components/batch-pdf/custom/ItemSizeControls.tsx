@@ -1,6 +1,7 @@
 "use client";
 
 import { ControlGroup, NumberField, SegmentedControl, controlLabelClass } from "./exportControls";
+import { Select } from "@/components/ui/select";
 import type { ExportOptions, MeasurementUnit } from "@/lib/batch-pdf/custom/types";
 
 export function ItemSizeControls({
@@ -55,15 +56,16 @@ export function ItemSizeControls({
               step={0.125}
               placeholder="Height"
             />
-            <select
+            <Select
               aria-label="Measurement unit"
               value={options.unit}
-              onChange={(event) => onChange({ unit: event.target.value as MeasurementUnit })}
-              className="rounded border border-line bg-panel px-2 py-1 text-sm"
-            >
-              <option value="in">in</option>
-              <option value="mm">mm</option>
-            </select>
+              onValueChange={(value) => onChange({ unit: value as MeasurementUnit })}
+              options={[
+                { value: "in", label: "in" },
+                { value: "mm", label: "mm" },
+              ]}
+              className="w-20"
+            />
           </div>
         </div>
       ) : null}

@@ -193,6 +193,84 @@ export function calculateImageResolutionForExport(args: {
   };
 }
 
+/** Below this many dots-per-inch a print is likely to look soft/blurry. */
+export const ACCEPTABLE_PRINT_DPI = 150;
+/** Recommended dots-per-inch for crisp print output. */
+export const IDEAL_PRINT_DPI = 300;
+
+export type PrintResolutionLevel = "low" | "acceptable" | "ideal";
+
+export type PrintResolutionAssessment = {
+  effectiveDpi: number;
+  level: PrintResolutionLevel;
+  printWidthIn: number;
+  printHeightIn: number;
+  /** Minimum pixel dimensions to reach the acceptable DPI at this print size. */
+  minWidthPxForAcceptable: number;
+  minHeightPxForAcceptable: number;
+  /** Pixel dimensions to reach the ideal DPI at this print size. */
+  idealWidthPx: number;
+  idealHeightPx: number;
+};
+
+/**
+ * Assess whether an image with the given pixel dimensions has enough resolution
+ * to print at a specific physical size without looking blurry. Returns the
+ * effective DPI (limited by the lower-resolution axis), a level, and the pixel
+ * dimensions needed to reach the acceptable and ideal DPI at that size.
+ */
+export function assessPrintResolution(args: {
+  intrinsicWidth: number;
+  intrinsicHeight: number;
+  printWidthIn: number;
+  printHeightIn: number;
+  acceptableDpi?: number;
+  idealDpi?: number;
+}): PrintResolutionAssessment | null {
+  const {
+    intrinsicWidth,
+    intrinsicHeight,
+    printWidthIn,
+    printHeightIn,
+    acceptableDpi = ACCEPTABLE_PRINT_DPI,
+    idealDpi = IDEAL_PRINT_DPI,
+  } = args;
+
+  if (
+    !Number.isFinite(intrinsicWidth) ||
+    intrinsicWidth <= 0 ||
+    !Number.isFinite(intrinsicHeight) ||
+    intrinsicHeight <= 0 ||
+    !Number.isFinite(printWidthIn) ||
+    printWidthIn <= 0 ||
+    !Number.isFinite(printHeightIn) ||
+    printHeightIn <= 0
+  ) {
+    return null;
+  }
+
+  const dpiX = intrinsicWidth / printWidthIn;
+  const dpiY = intrinsicHeight / printHeightIn;
+  const effectiveDpi = Math.min(dpiX, dpiY);
+  const level: PrintResolutionLevel =
+    effectiveDpi < acceptableDpi
+      ? "low"
+      : effectiveDpi < idealDpi
+        ? "acceptable"
+        : "ideal";
+
+  return {
+    effectiveDpi,
+    level,
+    printWidthIn,
+    printHeightIn,
+    minWidthPxForAcceptable: Math.ceil(printWidthIn * acceptableDpi),
+    minHeightPxForAcceptable: Math.ceil(printHeightIn * acceptableDpi),
+    idealWidthPx: Math.ceil(printWidthIn * idealDpi),
+    idealHeightPx: Math.ceil(printHeightIn * idealDpi),
+  };
+}
+
 export function resolveExportPageSizePoints(options: ExportOptions): Result<{
   widthPt: number;
   heightPt: number;
@@ -354,7 +432,7 @@ export function createDefaultExportOptions(): ExportOptions {
     gapX: CUSTOM_DESIGN_LIMITS.defaultGapInches,
     gapY: CUSTOM_DESIGN_LIMITS.defaultGapInches,
     cropMarks: false,
-    includeOverflowReport: true,
+    includeOverflowReport: false,
   };
 }
 

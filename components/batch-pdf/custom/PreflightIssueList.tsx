@@ -18,16 +18,24 @@ const SEVERITY_LABEL: Record<PreflightIssue["severity"], string> = {
   info: "Automatic",
 };
 
-const SEVERITY_STYLE: Record<PreflightIssue["severity"], string> = {
-  error: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  warning: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  info: "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400",
+// Badge: solid severity color with contrasting text.
+const SEVERITY_BADGE: Record<PreflightIssue["severity"], string> = {
+  error: "bg-danger text-panel",
+  warning: "bg-warning text-panel",
+  info: "bg-muted-foreground text-panel",
 };
 
-const SEVERITY_BORDER: Record<PreflightIssue["severity"], string> = {
-  error: "border-red-200 dark:border-red-900/40",
-  warning: "border-amber-200 dark:border-amber-900/40",
-  info: "border-line",
+// Whole-card tint + border + left accent so severity reads at a glance.
+const SEVERITY_CARD: Record<PreflightIssue["severity"], string> = {
+  error: "border-danger-line bg-danger-soft border-l-4 border-l-danger",
+  warning: "border-warning-line bg-warning-soft border-l-4 border-l-warning",
+  info: "border-line bg-muted border-l-4 border-l-muted-foreground",
+};
+
+const SEVERITY_TITLE: Record<PreflightIssue["severity"], string> = {
+  error: "text-danger",
+  warning: "text-warning",
+  info: "text-ink",
 };
 
 const SEVERITY_ORDER: Record<PreflightIssue["severity"], number> = {
@@ -107,18 +115,18 @@ export function PreflightIssueList({ items, hiddenCount }: Props) {
         {sorted.map(({ issue, sampleText }, index) => (
           <li
             key={`${issue.code}-${issue.rowIndex ?? "x"}-${issue.fieldBoxId ?? "x"}-${index}`}
-            className={`rounded-lg border ${SEVERITY_BORDER[issue.severity]} bg-panel p-3 text-sm`}
+            className={`rounded-lg border ${SEVERITY_CARD[issue.severity]} p-3 text-sm`}
           >
             <div className="flex items-center gap-2">
               <span
-                className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${SEVERITY_STYLE[issue.severity]}`}
+                className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${SEVERITY_BADGE[issue.severity]}`}
               >
                 {SEVERITY_LABEL[issue.severity]}
               </span>
-              <span className="truncate font-semibold text-ink">{title(issue)}</span>
+              <span className={`truncate font-semibold ${SEVERITY_TITLE[issue.severity]}`}>{title(issue)}</span>
             </div>
             <p className="mt-1.5 leading-5 text-ink">{explain(issue, sampleText)}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">{fix(issue)}</p>
+            <p className="mt-1 text-xs leading-5 text-ink-soft">{fix(issue)}</p>
           </li>
         ))}
       </ul>

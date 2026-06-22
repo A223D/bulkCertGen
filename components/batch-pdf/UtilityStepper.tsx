@@ -23,7 +23,7 @@ export function UtilityStepper({ steps }: UtilityStepperProps) {
         borderBottom: "1px solid #E7E2D6",
       }}
     >
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px 32px" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "14px clamp(16px, 4vw, 32px)" }}>
         {/* Desktop stepper */}
         <nav
           aria-label="Batch PDF progress"

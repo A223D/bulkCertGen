@@ -42,6 +42,10 @@ export function CustomExportOptionsPanel({
         Export options
       </p>
 
+      <p className="rounded-lg border border-warning-line bg-warning-soft px-3 py-2 text-sm leading-6 text-warning">
+        Tip: choose one per page for certificates, or several on a page for badges, cards, labels, and tickets you will cut out.
+      </p>
+
       <ExportLayoutModePicker
         value={exportOptions.layoutMode}
         onChange={(layoutMode) =>
@@ -61,10 +65,6 @@ export function CustomExportOptionsPanel({
           })
         }
       />
-
-      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-900">
-        Tip: choose one per page for certificates, or several on a page for badges, cards, labels, and tickets you will cut out.
-      </p>
 
       {showItemSizeControls ? (
         <ItemSizeControls options={exportOptions} isImageDesign={isImageDesign} onChange={patch} />

@@ -1,0 +1,1 @@
+Very Simple Batch PDF turns spreadsheet rows into polished personalized PDFs

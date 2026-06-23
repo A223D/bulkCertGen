@@ -35,7 +35,7 @@ export const runtime = "nodejs";
 const SAFE_ERROR =
   "Custom design export is not ready. Fix the highlighted issues and try again.";
 const SAFE_RENDER_ERROR =
-  "We could not generate this ZIP. Try again with fewer rows.";
+  "We could not generate your download. Try again with fewer rows.";
 
 function jsonError(message: string, status = 400): Response {
   return Response.json({ error: message }, { status });
@@ -192,6 +192,34 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
 
+    // Separate files with a single row and no report is just one PDF — skip the
+    // ZIP wrapper and return the bare PDF (the client names it from the headers).
+    if (
+      payload.exportOptions.layoutMode === "onePerPage" &&
+      cappedRows.length === 1 &&
+      !includeReport
+    ) {
+      const renderer = await createSeparateFileRenderer({
+        designBytes: renderDesignBytes,
+        designAsset: renderDesignAsset,
+        fieldBoxes: payload.fieldBoxes,
+        exportOptions: payload.exportOptions,
+      });
+      const bytes = await renderer.renderRow(cappedRows[0]);
+      const filename = makeSafeCustomPdfFilename({
+        index: 1,
+        row: cappedRows[0],
+        exportOptions: payload.exportOptions,
+      });
+
+      return new Response(Buffer.from(bytes), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${filename}"`,
+        },
+      });
+    }
+
     // Separate files: embed the background once into a base document and clone
     // it per row, then stream each PDF straight into the ZIP so we never hold
     // every per-row document (nor the whole archive) in memory at once.
@@ -255,7 +283,8 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
 
-    // Print sheets: a single multi-page PDF, optionally bundled with the report.
+    // Print sheets: a single multi-page PDF. Return it bare unless the report is
+    // requested, in which case the two files are bundled into a ZIP.
     const sheetBytes = await renderCustomDesignPrintSheets({
       designBytes: renderDesignBytes,
       designAsset: renderDesignAsset,
@@ -264,19 +293,24 @@ export async function POST(request: Request): Promise<Response> {
       exportOptions: payload.exportOptions,
     });
 
-    const files: Array<{ filename: string; bytes: Uint8Array }> = [
-      { filename: "custom-print-sheets.pdf", bytes: sheetBytes },
-    ];
-
-    if (includeReport) {
-      const csv = createPreflightReportCsv({ result: preflight });
-      files.push({
-        filename: PREFLIGHT_REPORT_FILENAME,
-        bytes: new TextEncoder().encode(csv),
+    if (!includeReport) {
+      return new Response(Buffer.from(sheetBytes), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition":
+            'attachment; filename="custom-print-sheets.pdf"',
+        },
       });
     }
 
-    const zipBytes = await createPdfZip(files);
+    const csv = createPreflightReportCsv({ result: preflight });
+    const zipBytes = await createPdfZip([
+      { filename: "custom-print-sheets.pdf", bytes: sheetBytes },
+      {
+        filename: PREFLIGHT_REPORT_FILENAME,
+        bytes: new TextEncoder().encode(csv),
+      },
+    ]);
 
     return new Response(Buffer.from(zipBytes), {
       headers: {

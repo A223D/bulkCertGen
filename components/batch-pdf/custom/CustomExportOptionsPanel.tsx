@@ -9,6 +9,10 @@ import { ItemSizeControls } from "./ItemSizeControls";
 import { SheetSpacingControls } from "./SheetSpacingControls";
 import { FilenameColumnControl } from "./FilenameColumnControl";
 import { ExportAddOnsControl } from "./ExportAddOnsControl";
+import {
+  recommendLayoutMode,
+  resolveExportItemSizePoints,
+} from "@/lib/batch-pdf/custom/export-options";
 import type { DesignAsset, ExportOptions } from "@/lib/batch-pdf/custom/types";
 
 type Props = {
@@ -29,6 +33,22 @@ export function CustomExportOptionsPanel({
   const isImageDesign = design.intrinsicUnit === "px";
   const isPrintSheets = exportOptions.layoutMode === "fitMultiplePerPage";
 
+  // Recommend a layout based on the current finished size so the likely choice
+  // is labelled and explained — never a silent default a user accepts blindly.
+  const itemSize = resolveExportItemSizePoints({ exportOptions, designAsset: design });
+  const recommendation = itemSize.ok
+    ? recommendLayoutMode({
+        itemWidthPt: itemSize.value.widthPt,
+        itemHeightPt: itemSize.value.heightPt,
+      })
+    : null;
+  const recommendationReason =
+    recommendation?.mode === "fitMultiplePerPage"
+      ? `Your item is small — about ${recommendation.itemsPerLetterSheet} fit on a Letter sheet — so several on a page is the usual choice.`
+      : recommendation?.mode === "onePerPage"
+        ? "Your item is large enough to fill a page, so one per page is the usual choice."
+        : undefined;
+
   const patch = useCallback(
     (changes: Partial<ExportOptions>) => {
       onChange({ ...exportOptions, ...changes });
@@ -48,6 +68,8 @@ export function CustomExportOptionsPanel({
 
       <ExportLayoutModePicker
         value={exportOptions.layoutMode}
+        recommendedValue={recommendation?.mode}
+        recommendationReason={recommendationReason}
         onChange={(layoutMode) =>
           patch({
             layoutMode,
@@ -61,7 +83,9 @@ export function CustomExportOptionsPanel({
                     ? { pageSize: "letter" as const }
                     : {}),
                 }
-              : {}),
+              : // One per page has no surrounding paper, so crop marks would land
+                // on the page edge and be clipped — turn them off when switching.
+                { cropMarks: false }),
           })
         }
       />
@@ -95,7 +119,7 @@ export function CustomExportOptionsPanel({
 
       <FilenameColumnControl options={exportOptions} csvHeaders={csvHeaders} onChange={patch} />
 
-      <ExportAddOnsControl options={exportOptions} showCropMarks onChange={patch} />
+      <ExportAddOnsControl options={exportOptions} showCropMarks={isPrintSheets} onChange={patch} />
     </section>
   );
 }

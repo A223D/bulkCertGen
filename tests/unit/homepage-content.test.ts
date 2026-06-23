@@ -53,7 +53,7 @@ describe("homepage content", () => {
     expect(description).toContain("Excel or Google Sheet");
     expect(description).toContain("professional certificates");
     expect(lastStep?.title).toBe("Preview and export");
-    expect(lastStep?.eyebrow).toBe("batch.zip");
+    expect(lastStep?.eyebrow).toBe("batch.pdf");
   });
 
   it("steps follow the spreadsheet-first order: export sheet → template → match → export", () => {

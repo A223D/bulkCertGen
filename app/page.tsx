@@ -10,16 +10,43 @@ import {
 import { BATCH_PDF_LIMITS } from "../lib/batch-pdf/limits";
 import { HeroCsvCard } from "@/components/batch-pdf/HeroCsvCard";
 import MapDiagram from "./map-diagram";
+import { absoluteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "Certificates, Badges & Cards from Spreadsheets | Very Simple Batch PDF",
+  title: "Certificates, Badges & Cards from Spreadsheets",
   description:
     "For teachers, event organizers, clubs, and busy teams: turn an Excel or Google Sheet plus a template into professional certificates, badges, cards, labels, and PDFs.",
   openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "Very Simple Batch PDF",
     title: "Certificates, Badges & Cards from Spreadsheets | Very Simple Batch PDF",
     description:
       "Turn one spreadsheet and one design into hundreds of polished personalized PDFs. No mail merge or design software required.",
+    images: [
+      {
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Very Simple Batch PDF turns spreadsheet rows into polished personalized PDFs",
+      },
+    ],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Certificates, Badges & Cards from Spreadsheets | Very Simple Batch PDF",
+    description:
+      "Turn one spreadsheet and one design into hundreds of polished personalized PDFs. No mail merge or design software required.",
+    images: [
+      {
+        url: "/twitter-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Very Simple Batch PDF turns spreadsheet rows into polished personalized PDFs",
+      },
+    ],
+  },
+  alternates: { canonical: "/" },
 };
 
 type Step = {
@@ -92,7 +119,7 @@ export const homepageSteps: Step[] = [
   },
   {
     title: "Preview and export",
-    eyebrow: "batch.zip",
+    eyebrow: "batch.pdf",
     description: "Check real rows, catch long text, then download your personalized PDFs in one file.",
     dark: true,
   },
@@ -149,12 +176,12 @@ export const homepageFaqs: Faq[] = [
   },
   {
     question: "How many PDFs can I generate?",
-    answer: `You can generate up to ${BATCH_PDF_LIMITS.freeExportRows} PDFs per batch and download them as a single ZIP. If your spreadsheet has more rows than that, the first ${BATCH_PDF_LIMITS.freeExportRows} are processed.`,
+    answer: `You can process up to ${BATCH_PDF_LIMITS.freeExportRows} rows per batch and download one combined PDF or a ZIP of separate PDFs. If your spreadsheet has more rows than that, the first ${BATCH_PDF_LIMITS.freeExportRows} are processed.`,
   },
   {
     question: "Do you store my files?",
     answer:
-      "Your CSV is used only to generate the current batch. We do not store uploaded spreadsheets or generated PDF files — once your ZIP is ready, the source data isn't kept.",
+      "Your CSV and design are used only for the current batch. We do not store uploaded spreadsheets, uploaded designs, or generated PDF files.",
   },
   {
     question: "Can I generate certificates, name badges, and labels?",
@@ -434,7 +461,7 @@ function SpreadsheetChecklist() {
     },
     {
       title: "Download professional PDFs",
-      body: "Export individual certificates, ID cards, badges, labels, appointment cards, or print sheets in one ZIP.",
+      body: "Export one combined PDF, separate files in a ZIP, or ready-to-print sheets.",
     },
   ];
 
@@ -771,10 +798,10 @@ function PricingSection() {
         <div className="mx-auto mb-10 max-w-[620px] text-center">
           <SectionKicker>Generate &amp; export</SectionKicker>
           <h2 className="mt-[14px] text-[34px] font-extrabold leading-[1.06] tracking-[-0.03em] sm:text-[44px]">
-            Download everything as a ZIP.
+            Download PDFs your way.
           </h2>
           <p className="mt-3 text-[17.5px] leading-[1.55] text-[#57534a]">
-            Generate your PDFs and download them in one bundle — up to{" "}
+            Generate a combined PDF, separate files, or print sheets — up to{" "}
             {BATCH_PDF_LIMITS.freeExportRows} per batch.
           </p>
         </div>
@@ -867,7 +894,7 @@ function PricingSection() {
         </div>
 
         <p className="mt-[22px] text-center font-mono text-[13px] text-[#9a9486]">
-          Bring a design and a spreadsheet, map the fields, and download your ZIP.
+          Bring a design and a spreadsheet, map the fields, and download your PDFs.
         </p>
       </div>
     </section>
@@ -899,9 +926,8 @@ function PrivacyBand() {
               Your files are used only for your batch.
             </h2>
             <p className="mt-2 max-w-[680px] text-[16px] leading-[1.55] text-[#57534a]">
-              Your CSV is used only to generate the current batch. We do not store
-              uploaded spreadsheets or generated PDF files — once your ZIP is ready, the
-              source data isn&apos;t kept.
+              Your CSV and design are used only for the current batch. We do not store
+              uploaded spreadsheets, uploaded designs, or generated PDF files.
             </p>
           </div>
         </div>
@@ -934,8 +960,61 @@ function HomeFooter() {
 }
 
 export default function HomePage() {
+  const structuredData = [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "Very Simple Batch PDF",
+      url: absoluteUrl("/"),
+      description:
+        "A free utility for turning CSV spreadsheet rows into personalized PDFs.",
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      name: "Very Simple Batch PDF",
+      url: absoluteUrl("/"),
+      image: absoluteUrl("/opengraph-image.png"),
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Any",
+      browserRequirements: "Requires a modern web browser with JavaScript enabled.",
+      description:
+        "Upload a CSV and a PNG or JPEG design, place spreadsheet fields, preview text fit, and export personalized PDFs.",
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD",
+      },
+      featureList: [
+        `Process up to ${BATCH_PDF_LIMITS.freeExportRows} CSV rows per batch`,
+        "Upload PNG or JPEG designs",
+        "Generate a combined PDF or separate PDFs",
+        "Create print sheets with crop marks",
+        "Preview and check text fit before export",
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: homepageFaqs.map((faq) => ({
+        "@type": "Question",
+        name: faq.question,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: faq.answer,
+        },
+      })),
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-[#faf8f3] text-[#1a1916]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
+        }}
+      />
       <div className="mx-auto max-w-[1440px] px-4 sm:px-8">
         <nav className="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-[#e7e2d6]/70 bg-[#faf8f3]/78 py-[18px] backdrop-blur-[10px]">
           <a
@@ -991,7 +1070,7 @@ export default function HomePage() {
             </h1>
             <p className="mt-[22px] max-w-[520px] text-[18.5px] leading-[1.55] text-[#57534a]">
               Start with an Excel or Google Sheet, choose a certificate, badge, card, or
-              label template, preview real rows, and download polished PDFs in one ZIP.
+              label template, preview real rows, and download polished PDFs your way.
               No formulas, design software, or technical setup.
             </p>
             <div className="mt-[30px] flex flex-wrap gap-3">
@@ -1128,14 +1207,14 @@ export default function HomePage() {
             />
             <div className="relative">
               <div className="inline-flex items-center gap-2 rounded-full bg-[#2a2723] px-[14px] py-[7px] font-mono text-[12px] font-semibold text-[#f2b01e]">
-                Excel or Google Sheets + template → ZIP of PDFs
+                Excel or Google Sheets + template → polished PDFs
               </div>
               <h2 className="mx-auto mt-[22px] max-w-[680px] text-[38px] font-extrabold leading-[1.05] tracking-[-0.035em] text-[#fcfbf7] sm:text-[52px]">
                 Have a roster and a template? Generate the certificates, badges, or cards.
               </h2>
               <p className="mx-auto mt-4 max-w-[480px] text-[18px] leading-[1.55] text-[#b7b1a4]">
                 Upload the sheet, match the columns, preview the results, and download
-                professional PDFs as a ZIP.
+                one combined PDF, a ZIP of separate files, or ready-to-print sheets.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-[13px]">
                 <PrimaryButton>Create PDFs</PrimaryButton>

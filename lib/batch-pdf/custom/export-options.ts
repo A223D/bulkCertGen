@@ -436,6 +436,71 @@ export function createDefaultExportOptions(): ExportOptions {
   };
 }
 
+const LETTER_WIDTH_PT = 8.5 * 72;
+const LETTER_HEIGHT_PT = 11 * 72;
+
+export type LayoutRecommendation = {
+  mode: ExportOptions["layoutMode"];
+  /** How many copies fit on a standard Letter sheet at default margins/gaps. */
+  itemsPerLetterSheet: number;
+};
+
+/**
+ * Recommends a layout mode from the physical item size by asking the real sheet
+ * engine how many copies fit on a Letter sheet (best of portrait/landscape) at
+ * the default margins and gaps. If two or more fit, the item is small enough
+ * that "several on a page (to cut out)" is the likely intent (badges, labels,
+ * cards); otherwise the item effectively fills a page, so "one per page".
+ * Falls back to "one per page" for invalid sizes.
+ */
+export function recommendLayoutMode(args: {
+  itemWidthPt: number;
+  itemHeightPt: number;
+}): LayoutRecommendation {
+  const { itemWidthPt, itemHeightPt } = args;
+
+  if (
+    !Number.isFinite(itemWidthPt) ||
+    !Number.isFinite(itemHeightPt) ||
+    itemWidthPt <= 0 ||
+    itemHeightPt <= 0
+  ) {
+    return { mode: "onePerPage", itemsPerLetterSheet: 0 };
+  }
+
+  const marginPt = CUSTOM_DESIGN_LIMITS.defaultMarginInches * 72;
+  const gapPt = CUSTOM_DESIGN_LIMITS.defaultGapInches * 72;
+  const orientations: Array<[number, number]> = [
+    [LETTER_WIDTH_PT, LETTER_HEIGHT_PT],
+    [LETTER_HEIGHT_PT, LETTER_WIDTH_PT],
+  ];
+
+  let itemsPerLetterSheet = 0;
+  for (const [pageWidthPt, pageHeightPt] of orientations) {
+    const layout = calculateSheetLayout({
+      rowCount: 1,
+      pageWidthPt,
+      pageHeightPt,
+      itemWidthPt,
+      itemHeightPt,
+      marginTopPt: marginPt,
+      marginRightPt: marginPt,
+      marginBottomPt: marginPt,
+      marginLeftPt: marginPt,
+      gapXPt: gapPt,
+      gapYPt: gapPt,
+    });
+    if (layout.ok) {
+      itemsPerLetterSheet = Math.max(itemsPerLetterSheet, layout.value.itemsPerPage);
+    }
+  }
+
+  return {
+    mode: itemsPerLetterSheet >= 2 ? "fitMultiplePerPage" : "onePerPage",
+    itemsPerLetterSheet,
+  };
+}
+
 /**
  * Resolves the effective one-per-page delivery format. Undefined (older
  * payloads) defaults to the single combined PDF.

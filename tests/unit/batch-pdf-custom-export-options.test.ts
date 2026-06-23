@@ -12,6 +12,7 @@ import {
   inchesToPoints,
   measurementToPoints,
   mmToPoints,
+  recommendLayoutMode,
   resolveExportItemSizePoints,
   resolveExportPageSizePoints,
   resolveOutputMode,
@@ -343,6 +344,43 @@ describe("applyOrientation", () => {
 
     const landscape = applyOrientation({ widthPt: 100, heightPt: 200, orientation: "landscape" });
     expect(landscape).toEqual({ widthPt: 200, heightPt: 100 });
+  });
+});
+
+describe("recommendLayoutMode", () => {
+  const inToPt = (n: number) => n * 72;
+
+  it("recommends one per page for large, page-filling items (certificate)", () => {
+    const result = recommendLayoutMode({ itemWidthPt: inToPt(11), itemHeightPt: inToPt(8.5) });
+    expect(result.mode).toBe("onePerPage");
+    expect(result.itemsPerLetterSheet).toBeLessThan(2);
+  });
+
+  it("recommends several on a page for small items (name badge, label, card)", () => {
+    expect(recommendLayoutMode({ itemWidthPt: inToPt(4), itemHeightPt: inToPt(3) }).mode).toBe(
+      "fitMultiplePerPage",
+    );
+    expect(recommendLayoutMode({ itemWidthPt: inToPt(4), itemHeightPt: inToPt(2) }).mode).toBe(
+      "fitMultiplePerPage",
+    );
+    expect(recommendLayoutMode({ itemWidthPt: inToPt(3.5), itemHeightPt: inToPt(2) }).mode).toBe(
+      "fitMultiplePerPage",
+    );
+    expect(
+      recommendLayoutMode({ itemWidthPt: inToPt(4), itemHeightPt: inToPt(3) }).itemsPerLetterSheet,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it("recommends one per page when only one copy fits a Letter sheet", () => {
+    // A ~7in square leaves no room for a second copy with default margins.
+    expect(recommendLayoutMode({ itemWidthPt: inToPt(7), itemHeightPt: inToPt(7) }).mode).toBe(
+      "onePerPage",
+    );
+  });
+
+  it("falls back to one per page for invalid sizes", () => {
+    expect(recommendLayoutMode({ itemWidthPt: 0, itemHeightPt: inToPt(3) }).mode).toBe("onePerPage");
+    expect(recommendLayoutMode({ itemWidthPt: NaN, itemHeightPt: NaN }).mode).toBe("onePerPage");
   });
 });
 

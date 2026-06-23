@@ -19,7 +19,7 @@ import { cssFontStack } from "@/lib/batch-pdf/custom/fonts/catalog";
 import { normalizedRectToPoints } from "@/lib/batch-pdf/custom/coordinates";
 import { resolveTextFit } from "@/lib/batch-pdf/custom/text-fit";
 import { clampPreviewRowIndex } from "@/lib/batch-pdf/preview";
-import { loadSessionCsv } from "@/lib/batch-pdf/session-csv";
+import { clearSessionCsv, loadSessionCsv } from "@/lib/batch-pdf/session-csv";
 import {
   createEmptyCustomDesignState,
   isCustomDesignPreviewReady,
@@ -35,6 +35,7 @@ import {
   IDEAL_PRINT_DPI,
   assessPrintResolution,
   createDefaultExportOptions,
+  recommendLayoutMode,
   resolveExportItemSizePoints,
   resolveSheetLayoutForExport,
 } from "@/lib/batch-pdf/custom/export-options";
@@ -266,9 +267,12 @@ function ExportLoadingAnimation({
       <div style={{ fontSize: 13.5, color: "#6E6A61", marginTop: 7, lineHeight: 1.45 }}>
         Personalizing {freeRows} row{freeRows !== 1 ? "s" : ""}, checking pages, and packing your files.
       </div>
-      <div style={{ ...MONO, fontSize: 11.5, color: "#9A9486", marginTop: 12 }}>
-        This takes at least 7 seconds so the download feels steady.
-      </div>
+      {MIN_EXPORT_LOADING_MS > 0 && (
+        <div style={{ ...MONO, fontSize: 11.5, color: "#9A9486", marginTop: 12 }}>
+          This takes at least {Math.round(MIN_EXPORT_LOADING_MS / 1000)} second
+          {Math.round(MIN_EXPORT_LOADING_MS / 1000) !== 1 ? "s" : ""} so the download feels steady.
+        </div>
+      )}
     </div>
   );
 }
@@ -310,7 +314,19 @@ const FINISHED_SIZE_PRESETS: FinishedSizePreset[] = [
   },
 ];
 
-const MIN_EXPORT_LOADING_MS = 7000;
+// Minimum time the export "loading" state stays up so the download feels steady
+// rather than flashing by. Configurable via NEXT_PUBLIC_MIN_EXPORT_LOADING_MS
+// (milliseconds; inlined at build time). Set to 0 to disable the delay; invalid
+// or negative values fall back to the 7000 ms default.
+const DEFAULT_MIN_EXPORT_LOADING_MS = 7000;
+
+function resolveMinExportLoadingMs(): number {
+  const raw = process.env.NEXT_PUBLIC_MIN_EXPORT_LOADING_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MIN_EXPORT_LOADING_MS;
+}
+
+const MIN_EXPORT_LOADING_MS = resolveMinExportLoadingMs();
 
 // Radix Select reserves the empty string, so the "not mapped" choice uses a sentinel.
 const UNMAPPED_VALUE = "__unmapped__";
@@ -823,17 +839,27 @@ export function BatchPdfClient() {
   const [lockAspectRatio, setLockAspectRatio] = useState(true);
   const [loadingBuiltInDesignId, setLoadingBuiltInDesignId] = useState<string | null>(null);
   const [builtInDesignError, setBuiltInDesignError] = useState<string | null>(null);
+  // Guards direct access to /create. The CSV lives only in the browser
+  // (sessionStorage), so this client check is the only place the route can be
+  // gated. "checking" until we read storage, then "ready" or "redirecting".
+  const [accessState, setAccessState] = useState<"checking" | "ready" | "redirecting">(
+    "checking",
+  );
 
   // Load CSV from sessionStorage on mount; redirect if missing
   useEffect(() => {
     const stored = loadSessionCsv();
     if (!stored) {
+      setAccessState("redirecting");
       router.replace("/");
       return;
     }
     // Syncing the one-time sessionStorage handoff into local state on mount is a
     // legitimate external-store read; this is the intended use of an effect.
+    // Note: we deliberately do NOT clear sessionStorage here so a mid-flow page
+    // refresh still resumes; it is cleared once a batch export succeeds.
     setSession((s) => ({ ...s, csv: stored.asCsvResult(), csvFileName: stored.fileName }));
+    setAccessState("ready");
   }, [router]);
 
   // ── Computed ───────────────────────────────────────────────────────────────
@@ -1075,13 +1101,33 @@ export function BatchPdfClient() {
       // Image designs use pixels, so "same as design" cannot resolve to physical
       // points — choose a friendly best-guess print size when the shape is clear.
       const needsCustomItemSize = asset.intrinsicUnit === "px";
+      if (!needsCustomItemSize) {
+        return { ...s, customDesign: { ...s.customDesign, asset, errors: [] } };
+      }
+
       const recommendedSize = getRecommendedFinishedSize(asset);
+      // Auto-select the likely layout from the recommended print size: small
+      // items (badges, labels, cards) default to several-on-a-page, large items
+      // (certificates) to one-per-page. The user still sees the recommendation
+      // labelled in the export step and can override it.
+      const { mode } = recommendLayoutMode({
+        itemWidthPt: (recommendedSize.customItemWidth ?? 0) * 72,
+        itemHeightPt: (recommendedSize.customItemHeight ?? 0) * 72,
+      });
+      const layoutPatch: Partial<ExportOptions> =
+        mode === "fitMultiplePerPage"
+          ? { layoutMode: "fitMultiplePerPage", orientation: "auto", pageSize: "letter" }
+          : { layoutMode: "onePerPage", cropMarks: false };
+
       return {
         ...s,
         customDesign: { ...s.customDesign, asset, errors: [] },
-        customExportOptions: needsCustomItemSize
-          ? { ...s.customExportOptions, itemSizeMode: "custom", ...recommendedSize }
-          : s.customExportOptions,
+        customExportOptions: {
+          ...s.customExportOptions,
+          itemSizeMode: "custom",
+          ...recommendedSize,
+          ...layoutPatch,
+        },
       };
     });
   }, []);
@@ -1266,6 +1312,11 @@ export function BatchPdfClient() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      // The batch is done. Drop the one-time CSV handoff so this completed batch
+      // can't be silently re-entered by navigating directly to /create; a new
+      // batch must start from the homepage upload. The current view keeps
+      // working because the CSV is still held in React state.
+      clearSessionCsv();
       setCustomExportStatus("success");
     } catch {
       await waitForMinimumExportLoading(exportStartedAt);
@@ -2018,6 +2069,17 @@ export function BatchPdfClient() {
     ? "clamp(18px, 2.4vh, 26px) clamp(14px, 2vw, 24px) 64px"
     : "clamp(22px, 3vh, 34px) clamp(18px, 3vw, 32px) 80px";
 
+  // Until the sessionStorage check resolves (or while redirecting a direct
+  // visitor who has no CSV), render a neutral panel with no wizard chrome so the
+  // stepper/steps never flash before the redirect.
+  if (accessState !== "ready") {
+    return (
+      <div style={{ textAlign: "center", padding: "120px 0", color: "#8A857A", fontSize: 15 }}>
+        Loading…
+      </div>
+    );
+  }
+
   return (
     <div>
       <UtilityStepper steps={buildSteps()} />
@@ -2030,11 +2092,6 @@ export function BatchPdfClient() {
         }}
         data-rpad
       >
-        {!session.csv && (
-          <div style={{ textAlign: "center", padding: "80px 0", color: "#8A857A", fontSize: 15 }}>
-            Loading…
-          </div>
-        )}
         {session.csv && session.step === "choose-design" && renderChooseDesign()}
         {session.csv && session.step === "setup-design" && renderStep3b()}
         {session.csv && session.step === "mapping" && renderStep4b()}

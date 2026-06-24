@@ -111,7 +111,6 @@ export function HeroCsvCard() {
 
   return (
     <div
-      id="vs-start"
       style={{
         background: "#FFFFFF",
         border: "1px solid #E7E2D6",

@@ -8,7 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { BATCH_PDF_LIMITS } from "../lib/batch-pdf/limits";
-import { HeroCsvCard } from "@/components/batch-pdf/HeroCsvCard";
+import { HomeEntryGate } from "@/components/batch-pdf/HomeEntryGate";
 import MapDiagram from "./map-diagram";
 import { absoluteUrl } from "@/lib/site";
 
@@ -684,7 +684,9 @@ function MappingPanel() {
             </div>
           </div>
 
-          <MapDiagram />
+          <div className="min-w-0 max-w-full overflow-x-auto">
+            <MapDiagram />
+          </div>
         </div>
       </div>
     </section>
@@ -1100,7 +1102,9 @@ export default function HomePage() {
             </div>
           </div>
 
-          <HeroCsvCard />
+          <div id="vs-start">
+            <HomeEntryGate />
+          </div>
         </header>
       </div>
 

@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: "Privacy",
-  description: "How Very Simple Batch PDF handles uploaded CSVs, designs, and generated files.",
+  description: "How Batch, Please handles uploaded CSVs, designs, and generated files.",
   alternates: { canonical: "/legal/privacy" },
 };
 

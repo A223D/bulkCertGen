@@ -81,7 +81,7 @@ export function DesktopOnlyNotice({
         <div className="flex items-center gap-[11px]">
           <BrandMark />
           <span className="text-[17px] font-extrabold tracking-[-0.02em] text-[#1A1916]">
-            Very Simple Batch PDF
+            Batch, <span className="italic text-[#F2B01E]">Please</span>
           </span>
         </div>
         {panel}

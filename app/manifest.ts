@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Very Simple Batch PDF",
-    short_name: "Batch PDF",
+    name: "Batch, Please",
+    short_name: "Batch, Please",
     description:
       "Turn CSV spreadsheet rows into personalized certificates, badges, cards, labels, and PDFs.",
     start_url: "/",

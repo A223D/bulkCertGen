@@ -19,8 +19,8 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "/",
-    siteName: "Very Simple Batch PDF",
-    title: "Certificates, Badges & Cards from Spreadsheets | Very Simple Batch PDF",
+    siteName: "Batch, Please",
+    title: "Certificates, Badges & Cards from Spreadsheets | Batch, Please",
     description:
       "Turn one spreadsheet and one design into hundreds of polished personalized PDFs. No mail merge or design software required.",
     images: [
@@ -28,13 +28,13 @@ export const metadata: Metadata = {
         url: "/opengraph-image.png",
         width: 1200,
         height: 630,
-        alt: "Very Simple Batch PDF turns spreadsheet rows into polished personalized PDFs",
+        alt: "Batch, Please turns spreadsheet rows into polished personalized PDFs",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Certificates, Badges & Cards from Spreadsheets | Very Simple Batch PDF",
+    title: "Certificates, Badges & Cards from Spreadsheets | Batch, Please",
     description:
       "Turn one spreadsheet and one design into hundreds of polished personalized PDFs. No mail merge or design software required.",
     images: [
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
         url: "/twitter-image.png",
         width: 1200,
         height: 630,
-        alt: "Very Simple Batch PDF turns spreadsheet rows into polished personalized PDFs",
+        alt: "Batch, Please turns spreadsheet rows into polished personalized PDFs",
       },
     ],
   },
@@ -945,7 +945,7 @@ function HomeFooter() {
         <div className="flex items-center gap-[11px]">
           <BrandMark size="sm" />
           <span className="text-[15px] font-extrabold tracking-[-0.02em] text-[#1a1916]">
-            Very Simple Batch PDF
+            Batch, <span className="italic text-[#F2B01E]">Please</span>
           </span>
         </div>
         <div className="flex flex-wrap gap-x-[22px] gap-y-2 text-[14px] font-semibold text-[#6e6a61]">
@@ -966,7 +966,7 @@ export default function HomePage() {
     {
       "@context": "https://schema.org",
       "@type": "WebSite",
-      name: "Very Simple Batch PDF",
+      name: "Batch, Please",
       url: absoluteUrl("/"),
       description:
         "A free utility for turning CSV spreadsheet rows into personalized PDFs.",
@@ -974,7 +974,7 @@ export default function HomePage() {
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      name: "Very Simple Batch PDF",
+      name: "Batch, Please",
       url: absoluteUrl("/"),
       image: absoluteUrl("/opengraph-image.png"),
       applicationCategory: "BusinessApplication",
@@ -1025,7 +1025,7 @@ export default function HomePage() {
           >
             <BrandMark />
             <span className="text-[17px] font-extrabold tracking-[-0.02em]">
-              Very Simple <span className="text-[#1a1916]">Batch PDF</span>
+              Batch, <span className="italic text-[#F2B01E]">Please</span>
             </span>
           </a>
           <div className="hidden items-center gap-[6px] text-[14.5px] font-semibold text-[#4a463e] lg:flex">

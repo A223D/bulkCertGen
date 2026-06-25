@@ -6,19 +6,19 @@ import "./globals.css";
 export const metadata: Metadata = {
   metadataBase: siteUrl,
   title: {
-    default: "Very Simple Batch PDF — CSV to PDF Generator",
-    template: "%s | Very Simple Batch PDF",
+    default: "Batch, Please — CSV to PDF Generator",
+    template: "%s | Batch, Please",
   },
   description:
     "Upload a CSV, choose a template, and generate certificates, labels, badges, cards, or simple PDFs in bulk.",
-  applicationName: "Very Simple Batch PDF",
+  applicationName: "Batch, Please",
   category: "productivity",
-  creator: "Very Simple Batch PDF",
+  creator: "Batch, Please",
   openGraph: {
     type: "website",
     locale: "en_CA",
-    siteName: "Very Simple Batch PDF",
-    title: "Very Simple Batch PDF — CSV to PDF Generator",
+    siteName: "Batch, Please",
+    title: "Batch, Please — CSV to PDF Generator",
     description:
       "Turn spreadsheet rows into personalized certificates, badges, cards, labels, and PDFs.",
     images: [
@@ -26,13 +26,13 @@ export const metadata: Metadata = {
         url: "/opengraph-image.png",
         width: 1200,
         height: 630,
-        alt: "Very Simple Batch PDF turns spreadsheet rows into polished personalized PDFs",
+        alt: "Batch, Please turns spreadsheet rows into polished personalized PDFs",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Very Simple Batch PDF — CSV to PDF Generator",
+    title: "Batch, Please — CSV to PDF Generator",
     description:
       "Turn spreadsheet rows into personalized certificates, badges, cards, labels, and PDFs.",
     images: [
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
         url: "/twitter-image.png",
         width: 1200,
         height: 630,
-        alt: "Very Simple Batch PDF turns spreadsheet rows into polished personalized PDFs",
+        alt: "Batch, Please turns spreadsheet rows into polished personalized PDFs",
       },
     ],
   },

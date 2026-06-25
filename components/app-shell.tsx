@@ -67,7 +67,7 @@ export function AppShell({ children }: AppShellProps) {
               color: "#1A1916",
             }}
           >
-            Very Simple Batch PDF
+            Batch, <span style={{ color: "#F2B01E", fontStyle: "italic" }}>Please</span>
           </span>
         </Link>
 

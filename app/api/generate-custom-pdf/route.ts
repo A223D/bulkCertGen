@@ -32,6 +32,16 @@ import {
 
 export const runtime = "nodejs";
 
+async function trackFlowCompleted(): Promise<void> {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return;
+  const date = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  await fetch(`${url}/incr/flows:${date}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 const SAFE_ERROR =
   "Custom design export is not ready. Fix the highlighted issues and try again.";
 const SAFE_RENDER_ERROR =
@@ -128,6 +138,8 @@ export async function POST(request: Request): Promise<Response> {
   if (preflight.status === "blocked" || preflight.status === "needsOutputSize") {
     return jsonError(SAFE_ERROR);
   }
+
+  trackFlowCompleted().catch(() => {});
 
   const outputMode = resolveOutputMode(payload.exportOptions);
   const includeReport = payload.exportOptions.includeOverflowReport;

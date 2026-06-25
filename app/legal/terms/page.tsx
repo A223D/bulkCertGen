@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
   title: "Terms",
-  description: "Terms for using the free Very Simple Batch PDF utility.",
+  description: "Terms for using the free Batch, Please utility.",
   alternates: { canonical: "/legal/terms" },
 };
 
@@ -16,7 +16,7 @@ export default function TermsPage() {
         </p>
         <h1 className="mt-2 text-3xl font-semibold">Simple utility terms</h1>
         <p className="mt-4 text-sm leading-6 text-muted-foreground">
-          Very Simple Batch PDF is a free utility for turning CSV rows and image
+          Batch, Please is a free utility for turning CSV rows and image
           designs into personalized PDF files. You are responsible for the files you
           upload and must have the right to use their contents.
         </p>

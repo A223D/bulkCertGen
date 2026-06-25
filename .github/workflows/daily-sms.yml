@@ -1,0 +1,42 @@
+name: Daily Flow SMS
+
+on:
+  schedule:
+    - cron: '30 23 * * *' # 6:30 PM EST (7:30 PM EDT)
+  workflow_dispatch:
+
+jobs:
+  send-sms:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send SMS if flows completed today
+        env:
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          TWILIO_TO_NUMBER: ${{ secrets.TWILIO_TO_NUMBER }}
+        run: |
+          DATE=$(TZ=America/New_York date +%Y-%m-%d)
+          KEY="flows:$DATE"
+
+          COUNT=$(curl -sf \
+            -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \
+            "$UPSTASH_REDIS_REST_URL/get/$KEY" \
+            | jq -r '.result // "0"')
+
+          echo "Flows completed today ($DATE): $COUNT"
+
+          if [ "$COUNT" -gt 0 ]; then
+            curl -sf -X POST \
+              "https://api.twilio.com/2010-04-01/Accounts/$TWILIO_ACCOUNT_SID/Messages.json" \
+              --user "$TWILIO_ACCOUNT_SID:$TWILIO_AUTH_TOKEN" \
+              --data-urlencode "From=$TWILIO_FROM_NUMBER" \
+              --data-urlencode "To=$TWILIO_TO_NUMBER" \
+              --data-urlencode "Body=Batch Please: $COUNT flow(s) completed today."
+
+            curl -sf \
+              -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \
+              "$UPSTASH_REDIS_REST_URL/del/$KEY"
+          fi

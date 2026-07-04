@@ -2,8 +2,14 @@ name: Daily Flow SMS
 
 on:
   schedule:
+    # GitHub scheduled workflows are best-effort. Use same-evening retry slots
+    # and an idempotency key below so a skipped/delayed run does not mean no SMS.
     - cron: '30 23 * * *' # 6:30 PM EST (7:30 PM EDT)
+    - cron: '45 23 * * *' # retry 15 minutes later
+    - cron: '0 0 * * *' # retry at 7:00 PM EST (8:00 PM EDT)
   workflow_dispatch:
+
+permissions: {}
 
 jobs:
   send-sms:
@@ -18,15 +24,33 @@ jobs:
           TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
           TWILIO_TO_NUMBER: ${{ secrets.TWILIO_TO_NUMBER }}
         run: |
+          set -euo pipefail
+
           DATE=$(TZ=America/New_York date +%Y-%m-%d)
           KEY="flows:$DATE"
+          SENT_KEY="flows-sms-sent:$DATE"
 
           COUNT=$(curl -sf \
             -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \
             "$UPSTASH_REDIS_REST_URL/get/$KEY" \
             | jq -r '.result // "0"')
 
+          if ! [[ "$COUNT" =~ ^[0-9]+$ ]]; then
+            echo "Unexpected flow count for $KEY: $COUNT"
+            COUNT=0
+          fi
+
           echo "Flows completed today ($DATE): $COUNT"
+
+          SENT=$(curl -sf \
+            -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \
+            "$UPSTASH_REDIS_REST_URL/get/$SENT_KEY" \
+            | jq -r '.result // "0"')
+
+          if [ "$SENT" = "1" ]; then
+            echo "SMS already sent for $DATE; skipping retry."
+            exit 0
+          fi
 
           if [ "$COUNT" -gt 0 ]; then
             curl -sf -X POST \
@@ -35,6 +59,14 @@ jobs:
               --data-urlencode "From=$TWILIO_FROM_NUMBER" \
               --data-urlencode "To=$TWILIO_TO_NUMBER" \
               --data-urlencode "Body=Batch Please: $COUNT flow(s) completed today."
+
+            curl -sf \
+              -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \
+              "$UPSTASH_REDIS_REST_URL/set/$SENT_KEY/1"
+
+            curl -sf \
+              -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \
+              "$UPSTASH_REDIS_REST_URL/expire/$SENT_KEY/1209600"
 
             curl -sf \
               -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN" \

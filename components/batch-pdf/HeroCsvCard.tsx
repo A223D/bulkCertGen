@@ -25,6 +25,10 @@ const HERO_SAMPLE_CSV = [
 
 type UploadState = "empty" | "drag" | "parsing" | "success" | "error";
 
+function getTruncationWarning(csv: CsvParseResult | null) {
+  return csv?.warnings.find((warning) => warning.code === "csv_rows_truncated") ?? null;
+}
+
 export function HeroCsvCard() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -108,6 +112,7 @@ export function HeroCsvCard() {
   };
 
   const isDrag = uploadState === "drag";
+  const truncationWarning = getTruncationWarning(csvResult);
 
   return (
     <div
@@ -341,6 +346,27 @@ export function HeroCsvCard() {
             </div>
           </div>
 
+          {truncationWarning ? (
+            <div
+              style={{
+                border: "1px solid #F0DFA8",
+                borderLeft: "5px solid #B58A12",
+                background: "#FFFAEB",
+                borderRadius: 14,
+                padding: "13px 14px",
+                marginTop: 12,
+                color: "#7A5E12",
+              }}
+            >
+              <div style={{ fontSize: 13.5, fontWeight: 800 }}>Only the first 500 rows will be included</div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.5, marginTop: 5 }}>
+                Your file has {truncationWarning.totalRows ?? csvResult.totalDataRows} rows.
+                {" "}Only the first {truncationWarning.processedRows ?? csvResult.rowCount} will be turned into PDFs;
+                {" "}the last {truncationWarning.droppedRows ?? Math.max(0, csvResult.totalDataRows - csvResult.rowCount)} will not be included.
+              </div>
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 12 }}>
             {csvResult.headers.map((col) => (
               <span
@@ -361,7 +387,7 @@ export function HeroCsvCard() {
           </div>
 
           <Button type="button" variant="primary" size="lg" fullWidth onClick={continueToWizard} className="mt-4">
-            Continue — choose a design <span>→</span>
+            {truncationWarning ? "Continue with first 500 rows" : "Continue — choose a design"} <span>→</span>
           </Button>
           <Button type="button" variant="ghost" size="sm" fullWidth onClick={reset} className="mt-2">
             Use a different file

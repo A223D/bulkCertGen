@@ -20,7 +20,8 @@ const inflight = new Map<string, Promise<Uint8Array>>();
 
 export type FontSource =
   | { kind: "standard"; name: StandardFonts }
-  | { kind: "embedded"; bytes: Uint8Array };
+  | { kind: "embedded"; bytes: Uint8Array }
+  | { kind: "unavailable"; fontFamily: string; fontWeight: FontWeightName };
 
 function standardFontName(
   fontFamily: string,
@@ -77,14 +78,13 @@ export async function resolveFontSource(
   const url = FONT_FILE_URLS[key];
 
   if (!url) {
-    return { kind: "standard", name: standardFontName("Helvetica", fontWeight) };
+    return { kind: "unavailable", fontFamily, fontWeight };
   }
 
   try {
     const bytes = await fetchFontBytes(key, url);
     return { kind: "embedded", bytes };
   } catch {
-    // Network failure → fall back to Helvetica so export never fails.
-    return { kind: "standard", name: standardFontName("Helvetica", fontWeight) };
+    return { kind: "unavailable", fontFamily, fontWeight };
   }
 }

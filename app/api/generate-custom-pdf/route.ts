@@ -5,13 +5,16 @@ import {
   validateCustomExportPayload,
 } from "@/lib/batch-pdf/custom/export-request";
 import { runCustomDesignPreflight } from "@/lib/batch-pdf/custom/preflight";
+import type { CustomDesignPreflightResult } from "@/lib/batch-pdf/custom/preflight";
 import {
   createSeparateFileRenderer,
+  isCustomRenderError,
   renderCustomDesignCombinedPdf,
   renderCustomDesignPrintSheets,
 } from "@/lib/batch-pdf/custom/compositor";
 import { resolveOutputMode } from "@/lib/batch-pdf/custom/export-options";
 import { makeSafeCustomPdfFilename } from "@/lib/batch-pdf/custom/custom-filenames";
+import { resolveFontSource } from "@/lib/batch-pdf/custom/fonts/server-fonts";
 import {
   encodeDesignAsBaselineJpeg,
   normalizeDesignImageBytes,
@@ -45,10 +48,70 @@ async function trackFlowCompleted(): Promise<void> {
 const SAFE_ERROR =
   "Custom design export is not ready. Fix the highlighted issues and try again.";
 const SAFE_RENDER_ERROR =
-  "We could not generate your download. Try again with fewer rows.";
+  "We could not generate your download. Check the highlighted issues and try again.";
 
 function jsonError(message: string, status = 400): Response {
   return Response.json({ error: message }, { status });
+}
+
+function preflightBlockedMessage(preflight: CustomDesignPreflightResult): string {
+  const issue = preflight.issues.find((candidate) => candidate.severity === "error");
+  if (!issue) return SAFE_ERROR;
+
+  if (issue.code === "unsupported_characters") {
+    const row = typeof issue.rowIndex === "number" ? `Row ${issue.rowIndex + 1}` : "A row";
+    const field = issue.fieldLabel ? `, field "${issue.fieldLabel}"` : "";
+    const font = issue.fontFamily ? ` with "${issue.fontFamily}"` : "";
+    const codes = issue.unsupportedCodePoints?.length
+      ? ` (${issue.unsupportedCodePoints.join(", ")})`
+      : "";
+    const recommendations = issue.recommendedFonts?.length
+      ? ` Try ${issue.recommendedFonts.join(", ")} for that field.`
+      : " Choose a different font for that field.";
+    return `${row}${field} contains characters that cannot be printed${font}${codes}.${recommendations}`;
+  }
+
+  if (issue.code === "text_overflow") {
+    return issue.message;
+  }
+
+  return SAFE_ERROR;
+}
+
+function renderErrorMessage(error: unknown): string {
+  if (!isCustomRenderError(error)) return SAFE_RENDER_ERROR;
+
+  if (error.code === "unsupported_characters") {
+    const field = error.fieldLabel ? `Field "${error.fieldLabel}"` : "A field";
+    const font = error.fontFamily ? ` with "${error.fontFamily}"` : "";
+    const codes = error.unsupportedCodePoints?.length
+      ? ` (${error.unsupportedCodePoints.join(", ")})`
+      : "";
+    return `${field} contains characters that cannot be printed${font}${codes}. Choose a different font for that field.`;
+  }
+
+  return error.message;
+}
+
+async function ensureExportFontsAvailable(
+  fieldBoxes: Parameters<typeof renderCustomDesignCombinedPdf>[0]["fieldBoxes"],
+): Promise<Response | null> {
+  const seen = new Set<string>();
+
+  for (const box of fieldBoxes) {
+    const key = `${box.style.fontFamily}/${box.style.fontWeight}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const source = await resolveFontSource(box.style.fontFamily, box.style.fontWeight);
+    if (source.kind === "unavailable") {
+      return jsonError(
+        `The font "${box.style.fontFamily}" could not be loaded for export. Try again or choose a different font.`,
+      );
+    }
+  }
+
+  return null;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -136,8 +199,11 @@ export async function POST(request: Request): Promise<Response> {
   const preflight = preflightResult.value;
 
   if (preflight.status === "blocked" || preflight.status === "needsOutputSize") {
-    return jsonError(SAFE_ERROR);
+    return jsonError(preflightBlockedMessage(preflight));
   }
+
+  const fontError = await ensureExportFontsAvailable(payload.fieldBoxes);
+  if (fontError) return fontError;
 
   trackFlowCompleted().catch(() => {});
 
@@ -331,7 +397,7 @@ export async function POST(request: Request): Promise<Response> {
           'attachment; filename="batch-pdf-custom-export.zip"',
       },
     });
-  } catch {
-    return jsonError(SAFE_RENDER_ERROR, 500);
+  } catch (error) {
+    return jsonError(renderErrorMessage(error), isCustomRenderError(error) ? 400 : 500);
   }
 }

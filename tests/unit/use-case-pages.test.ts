@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import sitemap from "../../app/sitemap";
+import sitemap, { dynamic, revalidate } from "../../app/sitemap";
 import { homepageUseCases } from "../../app/page";
 import { getUseCasePath, useCasePages } from "../../lib/use-case-pages";
 
@@ -34,15 +34,21 @@ describe("use-case landing pages", () => {
 
   it("includes every indexable page in the sitemap", () => {
     const urls = sitemap().map((entry) => new URL(entry.url).pathname);
+    const expectedUseCasePaths = useCasePages.map((page) => getUseCasePath(page.slug));
 
+    expect(dynamic).toBe("force-dynamic");
+    expect(revalidate).toBe(0);
     expect(urls).toContain("/");
     expect(urls).toContain("/use-cases");
     expect(urls).toContain("/legal/privacy");
     expect(urls).toContain("/legal/terms");
     expect(urls).not.toContain("/create");
 
-    for (const page of useCasePages) {
-      expect(urls).toContain(getUseCasePath(page.slug));
+    for (const path of expectedUseCasePaths) {
+      expect(urls).toContain(path);
     }
+
+    expect(urls).toHaveLength(4 + expectedUseCasePaths.length);
+    expect(new Set(urls).size).toBe(urls.length);
   });
 });

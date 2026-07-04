@@ -9,10 +9,12 @@ const FALLBACK_COLUMNS = ["name", "full name", "title", "email"];
 
 function slugify(value: string): string {
   return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim()
     .replace(/\s+/g, "-")
-    .replace(/[^\p{L}\p{N}-]+/gu, "-")
+    .replace(/[^a-z0-9-]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 }

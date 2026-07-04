@@ -66,6 +66,8 @@ function explain(issue: PreflightIssue, sampleText?: string): string {
       return `${quote(sampleText)} will be split across more than one line.`;
     case "missing_required_value":
       return "This field has no value for this row.";
+    case "unsupported_characters":
+      return `${quote(sampleText)} contains characters that ${issue.fontFamily ?? "this font"} can’t print in the final PDF.`;
     case "needs_output_size":
       return "We need the finished size before we can check whether text fits.";
     case "invalid_field_box":
@@ -86,6 +88,15 @@ function fix(issue: PreflightIssue): string {
       return "Happens automatically. Make the box taller if any lines get cut off.";
     case "missing_required_value":
       return "Add a value for this row in your spreadsheet, or remove the field.";
+    case "unsupported_characters": {
+      const fontList = issue.recommendedFonts?.length
+        ? ` Try ${issue.recommendedFonts.join(", ")}.`
+        : "";
+      const codes = issue.unsupportedCodePoints?.length
+        ? ` Unsupported code points: ${issue.unsupportedCodePoints.join(", ")}.`
+        : "";
+      return `Choose a font that supports those characters for this field.${fontList}${codes}`;
+    }
     case "needs_output_size":
       return "Choose the finished size above.";
     case "invalid_field_box":

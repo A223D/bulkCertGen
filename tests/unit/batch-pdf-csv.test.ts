@@ -38,6 +38,8 @@ describe("CSV utilities", () => {
   it("normalizes headers and cell values", () => {
     expect(normalizeHeader(" name ")).toBe("name");
     expect(normalizeCellValue(" Jane Smith ")).toBe("Jane Smith");
+    expect(normalizeCellValue("123 Main St\nApt 4")).toBe("123 Main St Apt 4");
+    expect(normalizeCellValue("A\u0000B\tC")).toBe("A B C");
     expect(normalizeCellValue(null)).toBe("");
     expect(normalizeCellValue(42)).toBe("42");
   });
@@ -142,7 +144,14 @@ describe("CSV utilities", () => {
     const result = assertParseOk(["name", ...rows].join("\n"));
 
     expect(result.rowCount).toBe(BATCH_PDF_LIMITS.maxRowsParsed);
+    expect(result.totalDataRows).toBe(BATCH_PDF_LIMITS.maxRowsParsed + 5);
     expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]).toMatchObject({
+      code: "csv_rows_truncated",
+      totalRows: BATCH_PDF_LIMITS.maxRowsParsed + 5,
+      processedRows: BATCH_PDF_LIMITS.maxRowsParsed,
+      droppedRows: 5,
+    });
   });
 
   it("enforces max field length without leaking row contents", () => {

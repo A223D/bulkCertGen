@@ -110,7 +110,7 @@ describe("getFieldBoxTextForRow", () => {
       box: makeBox({ required: true, source: { type: "csvColumn", column: "name" } }),
     });
     expect(missingRequired).toBe(true);
-    expect(valueLength).toBe(1); // space is present but blank
+    expect(valueLength).toBe(0);
   });
 
   it("does not flag missing optional value", () => {
@@ -175,6 +175,78 @@ describe("runCustomDesignPreflight - valid setup", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error();
     expect(result.value.summary.fitCount).toBe(3);
+  });
+
+  it("allows WinAnsi-safe accented text with standard fonts", () => {
+    const result = runCustomDesignPreflight({
+      design: makeImageDesign(),
+      rows: [makeRow({ name: "Cafe Noel Munchen" }), makeRow({ name: "Café Noël München" })],
+      fieldBoxes: [makeBox({ style: { ...createDefaultTextBoxStyle(), fontFamily: "Helvetica" } })],
+      exportOptions: makeImageExportOptions(),
+      csvHeaders: CSV_HEADERS,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error();
+    expect(result.value.status).toBe("ready");
+  });
+
+  it("blocks characters the selected standard font cannot print", () => {
+    const result = runCustomDesignPreflight({
+      design: makeImageDesign(),
+      rows: [makeRow({ name: "Şeyma Yılmaz" })],
+      fieldBoxes: [makeBox({ style: { ...createDefaultTextBoxStyle(), fontFamily: "Helvetica" } })],
+      exportOptions: makeImageExportOptions(),
+      csvHeaders: CSV_HEADERS,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error();
+    expect(result.value.status).toBe("blocked");
+    expect(result.value.issues[0]).toMatchObject({
+      code: "unsupported_characters",
+      severity: "error",
+      fontFamily: "Helvetica",
+    });
+    expect(result.value.issues[0].unsupportedCodePoints).toContain("U+015E");
+  });
+
+  it("allows representative broad Noto font samples when covered by generated metrics", () => {
+    const samples = [
+      ["Noto Sans Arabic", "محمد علي"],
+      ["Noto Sans Devanagari", "आरव"],
+      ["Noto Sans Hebrew", "דניאל"],
+      ["Noto Sans JP", "田中太郎"],
+      ["Noto Sans KR", "김민준"],
+      ["Noto Sans SC", "张伟"],
+      ["Noto Sans TC", "張偉"],
+      ["Noto Sans Thai", "สมชาย"],
+    ] as const;
+
+    for (const [fontFamily, name] of samples) {
+      const result = runCustomDesignPreflight({
+        design: makeImageDesign(),
+        rows: [makeRow({ name })],
+        fieldBoxes: [makeBox({ style: { ...createDefaultTextBoxStyle(), fontFamily } })],
+        exportOptions: makeImageExportOptions(),
+        csvHeaders: CSV_HEADERS,
+      });
+      expect(result.ok, fontFamily).toBe(true);
+      if (!result.ok) throw new Error();
+      expect(result.value.status, fontFamily).toBe("ready");
+    }
+  });
+
+  it("blocks emoji even when broad fonts are selected", () => {
+    const result = runCustomDesignPreflight({
+      design: makeImageDesign(),
+      rows: [makeRow({ name: "Alex 😀" })],
+      fieldBoxes: [makeBox({ style: { ...createDefaultTextBoxStyle(), fontFamily: "Noto Sans" } })],
+      exportOptions: makeImageExportOptions(),
+      csvHeaders: CSV_HEADERS,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error();
+    expect(result.value.status).toBe("blocked");
+    expect(result.value.issues[0].unsupportedCodePoints).toContain("U+1F600");
   });
 });
 

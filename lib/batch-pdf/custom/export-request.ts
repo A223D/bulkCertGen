@@ -1,4 +1,5 @@
 import { BATCH_PDF_LIMITS } from "../limits.ts";
+import { normalizePrintableText } from "../text-normalization.ts";
 import type { CsvRow, Result } from "../types.ts";
 import { validateDesignAsset } from "./design-file.ts";
 import { validateCustomFieldBoxes } from "./field-boxes.ts";
@@ -20,6 +21,47 @@ function safeError(code: string, message: string): Result<never> {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeHeaders(headers: unknown[]): Result<string[]> {
+  const normalized: string[] = [];
+  for (const header of headers) {
+    if (typeof header !== "string") {
+      return safeError("custom_export_invalid_payload", "Export request has invalid CSV headers.");
+    }
+    const value = normalizePrintableText(header);
+    if (!value) {
+      return safeError("custom_export_invalid_payload", "Export request has invalid CSV headers.");
+    }
+    normalized.push(value);
+  }
+
+  return { ok: true, value: normalized };
+}
+
+function normalizeRows(rows: unknown[], csvHeaders: string[]): Result<CsvRow[]> {
+  const normalizedRows: CsvRow[] = [];
+
+  for (const rowValue of rows) {
+    if (!isPlainObject(rowValue)) {
+      return safeError("custom_export_invalid_payload", "Export request has invalid row data.");
+    }
+
+    const row: CsvRow = {};
+    for (const header of csvHeaders) {
+      const value = normalizePrintableText(rowValue[header]);
+      if (value.length > BATCH_PDF_LIMITS.maxFieldLength) {
+        return safeError(
+          "custom_export_field_too_long",
+          `A CSV value is too long. Keep values under ${BATCH_PDF_LIMITS.maxFieldLength} characters.`,
+        );
+      }
+      row[header] = value;
+    }
+    normalizedRows.push(row);
+  }
+
+  return { ok: true, value: normalizedRows };
 }
 
 export function parseCustomExportPayload(
@@ -77,12 +119,18 @@ export function parseCustomExportPayload(
     );
   }
 
+  const headersResult = normalizeHeaders(csvHeaders);
+  if (!headersResult.ok) return headersResult;
+
+  const rowsResult = normalizeRows(rows, headersResult.value);
+  if (!rowsResult.ok) return rowsResult;
+
   return {
     ok: true,
     value: {
       mode: "free",
-      rows: rows as CsvRow[],
-      csvHeaders: csvHeaders as string[],
+      rows: rowsResult.value,
+      csvHeaders: headersResult.value,
       designAsset: designAsset as DesignAsset,
       fieldBoxes: fieldBoxes as CustomFieldBox[],
       exportOptions: exportOptions as ExportOptions,

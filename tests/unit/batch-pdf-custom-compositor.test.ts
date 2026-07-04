@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PDFDocument } from "pdf-lib";
 import {
+  CustomRenderError,
   createSeparateFileRenderer,
   renderCustomDesignCombinedPdf,
   renderCustomDesignPdfForRow,
@@ -216,6 +217,30 @@ describe("renderCustomDesignPdfForRow", () => {
         exportOptions: makeImageExportOptions(),
       }),
     ).resolves.toBeInstanceOf(Uint8Array);
+  });
+
+  it("normalizes newline values before measuring and drawing", async () => {
+    await expect(
+      renderCustomDesignPdfForRow({
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
+        row: { address: "123 Main St\nApt 4" },
+        fieldBoxes: [makeCsvBox("address")],
+        exportOptions: makeImageExportOptions(),
+      }),
+    ).resolves.toBeInstanceOf(Uint8Array);
+  });
+
+  it("throws a structured error for unsupported standard-font characters", async () => {
+    await expect(
+      renderCustomDesignPdfForRow({
+        designBytes: b64ToBytes(PNG_1X1_B64),
+        designAsset: makePngDesignAsset(),
+        row: { name: "Şeyma" },
+        fieldBoxes: [makeCsvBox("name")],
+        exportOptions: makeImageExportOptions(),
+      }),
+    ).rejects.toBeInstanceOf(CustomRenderError);
   });
 
   it("invalid design bytes throw an error safely", async () => {

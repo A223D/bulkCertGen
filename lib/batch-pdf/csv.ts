@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { BATCH_PDF_LIMITS } from "./limits.ts";
+import { normalizePrintableText } from "./text-normalization.ts";
 import type { CsvParseResult, CsvRow, Result } from "./types.ts";
 
 function csvError(code: string, message: string): Result<never> {
@@ -14,11 +15,7 @@ export function normalizeHeader(header: string): string {
 }
 
 export function normalizeCellValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-
-  return String(value).trim();
+  return normalizePrintableText(value);
 }
 
 export function validateCsvFile(file: File): Result<File> {
@@ -121,6 +118,9 @@ export function parseCsvText(text: string): Result<CsvParseResult> {
     warnings.push({
       code: "csv_rows_truncated",
       message: `This CSV has ${allDataRows.length} rows. Only the first ${BATCH_PDF_LIMITS.maxRowsParsed} will be processed.`,
+      totalRows: allDataRows.length,
+      processedRows: BATCH_PDF_LIMITS.maxRowsParsed,
+      droppedRows: allDataRows.length - BATCH_PDF_LIMITS.maxRowsParsed,
     });
   }
 
@@ -159,6 +159,7 @@ export function parseCsvText(text: string): Result<CsvParseResult> {
     value: {
       headers,
       rows,
+      totalDataRows: allDataRows.length,
       rowCount: rows.length,
       warnings,
     },

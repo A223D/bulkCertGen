@@ -2,7 +2,12 @@ import type { Result, CsvRow } from "../types.ts";
 import { measurementToPoints } from "./export-options.ts";
 import { normalizedRectToPoints } from "./coordinates.ts";
 import { validateCustomFieldBoxes } from "./field-boxes.ts";
+import {
+  findFontsSupportingText,
+  getUnsupportedCodePoints,
+} from "./fonts/font-coverage.ts";
 import { resolveTextFit, type TextFitBox } from "./text-fit.ts";
+import { normalizePrintableText } from "../text-normalization.ts";
 import type { CustomFieldBox, DesignAsset, ExportOptions } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -17,6 +22,7 @@ export type PreflightIssueCode =
   | "text_overflow"
   | "text_shrunk"
   | "text_wrapped"
+  | "unsupported_characters"
   | "invalid_field_box"
   | "needs_output_size";
 
@@ -28,6 +34,9 @@ export type PreflightIssue = {
   fieldLabel?: string;
   sourceColumn?: string;
   valueLength?: number;
+  fontFamily?: string;
+  unsupportedCodePoints?: string[];
+  recommendedFonts?: string[];
   message: string;
 };
 
@@ -108,7 +117,7 @@ export function getFieldBoxTextForRow(args: {
   const { row, box } = args;
 
   if (box.source.type === "staticText") {
-    const text = box.source.value;
+    const text = normalizePrintableText(box.source.value);
     return {
       text,
       sourceColumn: undefined,
@@ -118,7 +127,7 @@ export function getFieldBoxTextForRow(args: {
   }
 
   const column = box.source.column;
-  const value = row[column] ?? "";
+  const value = normalizePrintableText(row[column] ?? "");
   const isEmpty = value.trim() === "";
 
   return {
@@ -212,6 +221,36 @@ export function runCustomDesignPreflight(args: {
           sourceColumn,
           valueLength: 0,
           message: `Row ${rowIndex + 1}: required value is missing for field "${box.label}".`,
+        });
+        continue;
+      }
+
+      const unsupportedCodePoints = getUnsupportedCodePoints({
+        text,
+        fontFamily: box.style.fontFamily,
+        fontWeight: box.style.fontWeight,
+        uppercase: box.style.uppercase,
+      });
+
+      if (unsupportedCodePoints.length > 0) {
+        errorCount++;
+        pushIssue(issues, {
+          code: "unsupported_characters",
+          severity: "error",
+          rowIndex,
+          fieldBoxId: box.id,
+          fieldLabel: box.label,
+          sourceColumn,
+          valueLength,
+          fontFamily: box.style.fontFamily,
+          unsupportedCodePoints,
+          recommendedFonts: findFontsSupportingText({
+            text,
+            fontWeight: box.style.fontWeight,
+            uppercase: box.style.uppercase,
+            limit: 3,
+          }),
+          message: `Row ${rowIndex + 1}: field "${box.label}" contains characters that "${box.style.fontFamily}" cannot print (${unsupportedCodePoints.join(", ")}).`,
         });
         continue;
       }

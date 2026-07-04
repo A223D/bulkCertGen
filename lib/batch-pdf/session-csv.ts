@@ -5,12 +5,20 @@ const SESSION_KEY = "batch_pdf_csv_v1";
 type StoredCsv = {
   headers: string[];
   rows: Record<string, string>[];
+  totalDataRows?: number;
+  warnings?: CsvParseResult["warnings"];
   fileName: string;
 };
 
 export function saveSessionCsv(csv: CsvParseResult, fileName: string): void {
   try {
-    const data: StoredCsv = { headers: csv.headers, rows: csv.rows, fileName };
+    const data: StoredCsv = {
+      headers: csv.headers,
+      rows: csv.rows,
+      totalDataRows: csv.totalDataRows,
+      warnings: csv.warnings,
+      fileName,
+    };
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
   } catch {
     // sessionStorage unavailable (private browsing, quota exceeded, etc.)
@@ -28,8 +36,12 @@ export function loadSessionCsv(): (StoredCsv & { asCsvResult: () => CsvParseResu
       asCsvResult: (): CsvParseResult => ({
         headers: data.headers,
         rows: data.rows,
+        totalDataRows:
+          typeof data.totalDataRows === "number" && Number.isFinite(data.totalDataRows)
+            ? data.totalDataRows
+            : data.rows.length,
         rowCount: data.rows.length,
-        warnings: [],
+        warnings: Array.isArray(data.warnings) ? data.warnings : [],
       }),
     };
   } catch {

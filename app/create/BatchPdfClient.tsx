@@ -118,6 +118,20 @@ const SUBTEXT: React.CSSProperties = {
   margin: "0 0 22px",
 };
 
+function getCsvTruncationWarning(csv: CsvParseResult | null) {
+  return csv?.warnings.find((warning) => warning.code === "csv_rows_truncated") ?? null;
+}
+
+function getCsvTruncationReminder(csv: CsvParseResult | null): string | null {
+  const warning = getCsvTruncationWarning(csv);
+  if (!warning || !csv) return null;
+
+  const totalRows = warning.totalRows ?? csv.totalDataRows;
+  const processedRows = warning.processedRows ?? csv.rowCount;
+  const droppedRows = warning.droppedRows ?? Math.max(0, totalRows - processedRows);
+  return `This export covers rows 1-${processedRows} of ${totalRows}. The last ${droppedRows} rows will not be included.`;
+}
+
 function HelpfulTip({
   children,
   style,
@@ -1899,6 +1913,7 @@ export function BatchPdfClient() {
     const statusAccent = canExport ? "#2E8B57" : "#B5482E";
     const statusIcon = canExport ? "✓" : "×";
     const statusTitle = canExport ? "Ready to generate" : "Adjust export setup";
+    const truncationNotice = getCsvTruncationReminder(csv);
     let statusBody = "Choose how the final PDFs should be arranged.";
 
     if (canExport && hasWarnings) {
@@ -1921,6 +1936,11 @@ export function BatchPdfClient() {
         <HelpfulTip style={{ maxWidth: 720, marginBottom: 16 }}>
           Choose one per page for certificates. Choose several on a page for badges, tickets, labels, and anything you will cut out after printing.
         </HelpfulTip>
+        {truncationNotice ? (
+          <div style={{ maxWidth: 720, border: "1px solid #F0DFA8", borderLeft: "5px solid #B58A12", background: "#FFFAEB", color: "#7A5E12", borderRadius: 14, padding: "12px 14px", marginBottom: 16, fontSize: 13.5, lineHeight: 1.5, fontWeight: 700 }}>
+            {truncationNotice}
+          </div>
+        ) : null}
 
         <div data-rcol style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, alignItems: "start" }}>
           <div style={{ display: "grid", gap: 16, alignContent: "start" }}>
@@ -1985,6 +2005,7 @@ export function BatchPdfClient() {
     const customButtonLabel = isPrintSheets
       ? "Generate free print-sheet PDF ↓"
       : "Generate your free PDFs ↓";
+    const truncationNotice = getCsvTruncationReminder(session.csv);
 
     return (
       <div style={{ maxWidth: 600, margin: "0 auto" }}>
@@ -2002,6 +2023,11 @@ export function BatchPdfClient() {
         <div style={{ background: "#fff", border: "1px solid #E7E2D6", borderRadius: 20, padding: 24, boxShadow: "0 24px 50px -34px rgba(26,25,22,0.3)" }}>
           {exportStatus === "idle" && (
             <div>
+              {truncationNotice ? (
+                <div style={{ border: "1px solid #F0DFA8", borderLeft: "5px solid #B58A12", background: "#FFFAEB", color: "#7A5E12", borderRadius: 14, padding: "12px 14px", marginBottom: 14, fontSize: 13.5, lineHeight: 1.5, fontWeight: 700 }}>
+                  {truncationNotice}
+                </div>
+              ) : null}
               {summary.map(([k, v]) => (
                 <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderBottom: "1px solid #F4F1E9" }}>
                   <span style={{ fontSize: 13.5, color: "#6E6A61" }}>{k}</span>

@@ -12,6 +12,10 @@ import {
   isKnownFontFamily,
   resolveAvailableWeight,
 } from "@/lib/batch-pdf/custom/fonts/catalog";
+import {
+  findFontsSupportingText,
+  getUnsupportedCodePoints,
+} from "@/lib/batch-pdf/custom/fonts/font-coverage";
 import { FONT_METRICS } from "@/lib/batch-pdf/custom/fonts/metrics.generated";
 import { FONT_FILE_URLS } from "@/lib/batch-pdf/custom/fonts/font-urls.generated";
 import { resolveFontSource } from "@/lib/batch-pdf/custom/fonts/server-fonts";
@@ -118,7 +122,7 @@ describe("text measurement with Google font metrics", () => {
 describe("server-side font embedding", () => {
   it("records a CDN URL for every Google font weight", () => {
     expect(FONT_FILE_URLS["Roboto-normal"]).toMatch(/^https:\/\/fonts\.gstatic\.com\//);
-    expect(FONT_FILE_URLS["Playfair_Display-bold"]).toMatch(/\.ttf$/);
+    expect(FONT_FILE_URLS["Playfair_Display-bold"]).toMatch(/^https:\/\/fonts\.gstatic\.com\//);
   });
 
   it("resolves standard fonts to built-ins without fetching", async () => {
@@ -137,13 +141,13 @@ describe("server-side font embedding", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to Helvetica when the fetch fails", async () => {
+  it("returns unavailable when the fetch fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { status: 503 })),
     );
     const src = await resolveFontSource("Anton", "normal");
-    expect(src.kind).toBe("standard");
+    expect(src.kind).toBe("unavailable");
   });
 
   it("embeds a fetched Google font into a PDF document", async () => {
@@ -158,5 +162,29 @@ describe("server-side font embedding", () => {
     page.drawText("Sample", { x: 10, y: 40, size: 24, font });
     const bytes = await doc.save();
     expect(bytes.byteLength).toBeGreaterThan(1000);
+  });
+});
+
+describe("font coverage", () => {
+  it("matches WinAnsi behavior for standard fonts", () => {
+    expect(
+      getUnsupportedCodePoints({
+        text: "Café Noël",
+        fontFamily: "Helvetica",
+        fontWeight: "normal",
+      }),
+    ).toEqual([]);
+    expect(
+      getUnsupportedCodePoints({
+        text: "Şeyma",
+        fontFamily: "Helvetica",
+        fontWeight: "normal",
+      }),
+    ).toContain("U+015E");
+  });
+
+  it("finds broad Noto recommendations for representative script text", () => {
+    expect(findFontsSupportingText({ text: "田中太郎", fontWeight: "normal" })).toContain("Noto Sans JP");
+    expect(findFontsSupportingText({ text: "محمد", fontWeight: "normal" })).toContain("Noto Sans Arabic");
   });
 });

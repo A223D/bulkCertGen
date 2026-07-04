@@ -14,10 +14,12 @@ import { resolveDesignItemSizeForPreflight } from "./preflight.ts";
 import { resolveTextFit } from "./text-fit.ts";
 import { estimateTextBlockHeightPt } from "./text-measurement.ts";
 import { resolveFontSource } from "./fonts/server-fonts.ts";
+import { getUnsupportedCodePoints } from "./fonts/font-coverage.ts";
 import {
   calculateTextStartPosition,
   parseHexColorToRgb,
 } from "./pdf-text.ts";
+import { normalizePrintableText } from "../text-normalization.ts";
 import type { CsvRow } from "../types.ts";
 import type { CustomFieldBox, DesignAsset, ExportOptions, TextBoxStyle } from "./types.ts";
 
@@ -50,6 +52,32 @@ type BackgroundDrawer = (page: PDFPage, itemRect: ItemRect) => void;
 // page. Classic indirect objects and an xref table are larger, but maximize
 // compatibility for files intended to be downloaded and opened anywhere.
 const COMPATIBLE_PDF_SAVE_OPTIONS = { useObjectStreams: false } as const;
+
+export class CustomRenderError extends Error {
+  code: "unsupported_characters" | "font_unavailable";
+  fieldLabel?: string;
+  fontFamily?: string;
+  unsupportedCodePoints?: string[];
+
+  constructor(args: {
+    code: CustomRenderError["code"];
+    message: string;
+    fieldLabel?: string;
+    fontFamily?: string;
+    unsupportedCodePoints?: string[];
+  }) {
+    super(args.message);
+    this.name = "CustomRenderError";
+    this.code = args.code;
+    this.fieldLabel = args.fieldLabel;
+    this.fontFamily = args.fontFamily;
+    this.unsupportedCodePoints = args.unsupportedCodePoints;
+  }
+}
+
+export function isCustomRenderError(error: unknown): error is CustomRenderError {
+  return error instanceof CustomRenderError;
+}
 
 async function saveCompatiblePdf(document: PDFDocument): Promise<Uint8Array> {
   const bytes = await document.save(COMPATIBLE_PDF_SAVE_OPTIONS);
@@ -428,6 +456,13 @@ function makeFontFactory(doc: PDFDocument): FontFactory {
     const cached = fontCache.get(cacheKey);
     if (cached) return cached;
     const source = await resolveFontSource(fontFamily, fontWeight);
+    if (source.kind === "unavailable") {
+      throw new CustomRenderError({
+        code: "font_unavailable",
+        fontFamily,
+        message: `The font "${fontFamily}" could not be loaded for export. Try again or choose a different font.`,
+      });
+    }
     const font =
       source.kind === "standard"
         ? await doc.embedFont(source.name)
@@ -442,8 +477,30 @@ function makeFontFactory(doc: PDFDocument): FontFactory {
 // ---------------------------------------------------------------------------
 
 function getRawTextForBox(row: CsvRow, box: CustomFieldBox): string {
-  if (box.source.type === "staticText") return box.source.value;
-  return row[box.source.column] ?? "";
+  if (box.source.type === "staticText") return normalizePrintableText(box.source.value);
+  return normalizePrintableText(row[box.source.column] ?? "");
+}
+
+function assertTextPrintable(args: {
+  text: string;
+  box: CustomFieldBox;
+}): void {
+  const unsupportedCodePoints = getUnsupportedCodePoints({
+    text: args.text,
+    fontFamily: args.box.style.fontFamily,
+    fontWeight: args.box.style.fontWeight,
+    uppercase: false,
+  });
+
+  if (unsupportedCodePoints.length > 0) {
+    throw new CustomRenderError({
+      code: "unsupported_characters",
+      fieldLabel: args.box.label,
+      fontFamily: args.box.style.fontFamily,
+      unsupportedCodePoints,
+      message: `Field "${args.box.label}" contains characters that "${args.box.style.fontFamily}" cannot print (${unsupportedCodePoints.join(", ")}).`,
+    });
+  }
 }
 
 /**
@@ -531,6 +588,7 @@ async function drawFieldBoxesInRect(args: {
       for (let i = 0; i < lines.length; i++) {
         const lineText = lines[i];
         if (!lineText) continue;
+        assertTextPrintable({ text: lineText, box });
 
         const lineWidth = font.widthOfTextAtSize(lineText, fontSize);
         const lineX = resolveLineX(lineWidth, boxX, boxWidth, box.style.align);
@@ -546,6 +604,7 @@ async function drawFieldBoxesInRect(args: {
       }
     } else {
       const displayText = fitResult.renderedText;
+      assertTextPrintable({ text: displayText, box });
       const textWidth = font.widthOfTextAtSize(displayText, fontSize);
       const textHeight = lineHeightPt;
 

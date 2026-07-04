@@ -39,6 +39,7 @@ export type BatchPdfTemplate = {
 export type CsvParseResult = {
   headers: string[];
   rows: CsvRow[];
+  totalDataRows: number;
   rowCount: number;
   warnings: BatchPdfWarning[];
 };
@@ -52,6 +53,9 @@ export type MappedDocumentData = Record<string, string>;
 export type BatchPdfWarning = {
   code: string;
   message: string;
+  totalRows?: number;
+  processedRows?: number;
+  droppedRows?: number;
   rowIndex?: number;
   fieldKey?: string;
 };

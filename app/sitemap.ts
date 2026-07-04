@@ -2,6 +2,9 @@ import type { MetadataRoute } from "next";
 import { absoluteUrl } from "@/lib/site";
 import { getUseCasePath, useCasePages } from "@/lib/use-case-pages";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {

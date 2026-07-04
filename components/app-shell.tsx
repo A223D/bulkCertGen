@@ -81,6 +81,18 @@ export function AppShell({ children }: AppShellProps) {
           }}
         >
           <Link
+            href="/use-cases"
+            className="hidden sm:inline-flex"
+            style={{
+              color: "#4A463E",
+              padding: "8px 12px",
+              borderRadius: 8,
+              textDecoration: "none",
+            }}
+          >
+            Use cases
+          </Link>
+          <Link
             href="/legal/privacy"
             className="hidden sm:inline-flex"
             style={{

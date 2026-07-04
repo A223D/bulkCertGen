@@ -60,6 +60,7 @@ type UseCase = {
   title: string;
   description: string;
   kind: "certificate" | "badge" | "id" | "labels" | "appointment" | "table" | "tag" | "pass";
+  href: string;
 };
 
 type Faq = {
@@ -87,7 +88,7 @@ const navLinks = [
 
 const footerNavLinks = [
   { href: "#how", label: "How it works" },
-  { href: "#uses", label: "Use cases" },
+  { href: "/use-cases", label: "Use cases" },
   { href: "#export", label: "Export" },
   { href: "#faq", label: "FAQ" },
 ];
@@ -126,14 +127,54 @@ export const homepageSteps: Step[] = [
 ];
 
 export const homepageUseCases: UseCase[] = [
-  { title: "Certificates", description: "Courses, awards, completion", kind: "certificate" },
-  { title: "Event badges", description: "Conferences, meetups", kind: "badge" },
-  { title: "ID cards", description: "Staff, members, students", kind: "id" },
-  { title: "Mailing labels", description: "Addresses, return slips", kind: "labels" },
-  { title: "Appointment cards", description: "Clinics, salons, services", kind: "appointment" },
-  { title: "Table cards", description: "Weddings, dinners, seating", kind: "table" },
-  { title: "Gift tags", description: "Favors, hampers, presents", kind: "tag" },
-  { title: "Workshop passes", description: "Classes, sessions, entry", kind: "pass" },
+  {
+    title: "Certificates",
+    description: "Courses, awards, completion",
+    kind: "certificate",
+    href: "/use-cases/certificate-generator-from-csv",
+  },
+  {
+    title: "Event badges",
+    description: "Conferences, meetups",
+    kind: "badge",
+    href: "/use-cases/event-badges-from-spreadsheet",
+  },
+  {
+    title: "ID cards",
+    description: "Staff, members, students",
+    kind: "id",
+    href: "/use-cases/id-cards-from-csv",
+  },
+  {
+    title: "Mailing labels",
+    description: "Addresses, return slips",
+    kind: "labels",
+    href: "/use-cases/mailing-labels-from-csv",
+  },
+  {
+    title: "Appointment cards",
+    description: "Clinics, salons, services",
+    kind: "appointment",
+    href: "/use-cases/appointment-cards-from-csv",
+  },
+  {
+    title: "Table cards",
+    description: "Weddings, dinners, seating",
+    kind: "table",
+    href: "/use-cases/table-cards-from-spreadsheet",
+  },
+  {
+    title: "Gift tags",
+    description: "Favors, hampers, presents",
+    kind: "tag",
+    href: "/use-cases/gift-tags-from-csv",
+  },
+  {
+    title: "Workshop passes",
+    description: "Classes, sessions, entry",
+    kind: "pass",
+    href: "/use-cases/workshop-passes-from-spreadsheet",
+  },
 ];
 
 export const homepagePricingPlans: PricingPlan[] = [
@@ -950,9 +991,9 @@ function HomeFooter() {
         </div>
         <div className="flex flex-wrap gap-x-[22px] gap-y-2 text-[14px] font-semibold text-[#6e6a61]">
           {footerNavLinks.map((link) => (
-            <a key={link.href} href={link.href} className="hover:text-[#1a1916]">
+            <Link key={link.href} href={link.href} className="hover:text-[#1a1916]">
               {link.label}
-            </a>
+            </Link>
           ))}
         </div>
         <p className="font-mono text-[12px] text-[#a39b8a]">One design. Many PDFs.</p>
@@ -1147,14 +1188,15 @@ export default function HomePage() {
           </div>
           <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
             {homepageUseCases.map((useCase) => (
-              <article
+              <Link
                 key={useCase.title}
-                className="rounded-[16px] border border-[#e7e2d6] bg-white p-[18px] shadow-[0_1px_0_rgba(26,25,22,0.02)]"
+                href={useCase.href}
+                className="rounded-[16px] border border-[#e7e2d6] bg-white p-[18px] text-[#1a1916] no-underline shadow-[0_1px_0_rgba(26,25,22,0.02)] hover:-translate-y-0.5"
               >
                 <UseCaseVisual kind={useCase.kind} />
                 <h3 className="text-[15.5px] font-bold">{useCase.title}</h3>
                 <p className="mt-[3px] text-[13px] text-[#8a857a]">{useCase.description}</p>
-              </article>
+              </Link>
             ))}
           </div>
         </div>

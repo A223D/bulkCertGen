@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Info, Trash2 } from "lucide-react";
+import { Copy, Info, Trash2 } from "lucide-react";
 import { TextStyleControls } from "./TextStyleControls";
 import { FontPicker } from "./fonts/FontPicker";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ type FieldBoxInspectorProps = {
   csvHeaders: string[];
   onUpdate: (boxId: string, patch: Partial<CustomFieldBox>) => void;
   onDelete: (boxId: string) => void;
+  onDuplicate: (boxId: string) => void;
 };
 
 const OVERFLOW_OPTIONS = [
@@ -60,8 +61,13 @@ export function FieldBoxInspector({
   csvHeaders,
   onUpdate,
   onDelete,
+  onDuplicate,
 }: FieldBoxInspectorProps) {
   const [showMore, setShowMore] = useState(false);
+  const [staticDraftState, setStaticDraftState] = useState<{
+    boxId: string | null;
+    value: string;
+  }>({ boxId: null, value: "" });
 
   if (!box) {
     return (
@@ -72,15 +78,23 @@ export function FieldBoxInspector({
   }
 
   const selectedSource = sourceValue(box.source);
+  const staticDraft =
+    box.source.type === "staticText" && staticDraftState.boxId === box.id
+      ? staticDraftState.value
+      : box.source.type === "staticText"
+        ? box.source.value
+        : "";
 
   function updateSource(value: string) {
     if (!box) return;
 
     if (value === "static") {
+      const nextValue = box.source.type === "staticText" ? box.source.value : "Custom text";
+      setStaticDraftState({ boxId: box.id, value: nextValue });
       onUpdate(box.id, {
         source: {
           type: "staticText",
-          value: box.source.type === "staticText" ? box.source.value : "Custom text",
+          value: nextValue,
         },
         label: box.label || "Custom text",
       });
@@ -88,6 +102,7 @@ export function FieldBoxInspector({
     }
 
     const column = value.replace(/^csv:/, "");
+    setStaticDraftState({ boxId: null, value: "" });
     onUpdate(box.id, {
       source: { type: "csvColumn", column },
       label: box.label || column,
@@ -142,13 +157,27 @@ export function FieldBoxInspector({
           <span>Custom text</span>
           <Input
             type="text"
-            value={box.source.value}
-            onChange={(event) =>
-              onUpdate(box.id, {
-                source: { type: "staticText", value: event.target.value },
-              })
-            }
+            value={staticDraft}
+            onChange={(event) => {
+              setStaticDraftState({ boxId: box.id, value: event.target.value });
+              if (event.target.value.trim() !== "") {
+                onUpdate(box.id, {
+                  source: { type: "staticText", value: event.target.value },
+                });
+              }
+            }}
+            onBlur={() => {
+              if (staticDraft.trim() === "" && box.source.type === "staticText") {
+                const restored = box.source.value;
+                setStaticDraftState({ boxId: box.id, value: restored });
+              }
+            }}
           />
+          {staticDraft.trim() === "" ? (
+            <span className="text-xs text-muted-foreground">
+              Custom text cannot be empty — type something or keep the last value.
+            </span>
+          ) : null}
         </label>
       ) : null}
 
@@ -273,7 +302,15 @@ export function FieldBoxInspector({
         </p>
       </div>
 
-      <div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() => onDuplicate(box.id)}
+        >
+          <Copy className="h-4 w-4" /> Duplicate field
+        </Button>
         <Button
           type="button"
           variant="danger"

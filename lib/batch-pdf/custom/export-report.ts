@@ -17,10 +17,20 @@ const REPORT_COLUMNS = [
 export const PREFLIGHT_REPORT_FILENAME = "preflight-report.csv";
 
 function escapeCsvCell(value: string): string {
+  const formulaSafe = formulaPrefixGuard(value);
   // Quote the cell when it contains a comma, quote, or newline. Inner quotes
   // are doubled per RFC 4180.
-  if (/[",\r\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
+  if (/[",\r\n]/.test(formulaSafe)) {
+    return `"${formulaSafe.replace(/"/g, '""')}"`;
+  }
+  return formulaSafe;
+}
+
+const FORMULA_TRIGGER_CHARS = /^[=+\-@\t\r]/;
+
+function formulaPrefixGuard(value: string): string {
+  if (FORMULA_TRIGGER_CHARS.test(value)) {
+    return `'${value}`;
   }
   return value;
 }

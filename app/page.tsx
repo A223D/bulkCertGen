@@ -140,8 +140,8 @@ export const homepageUseCases: UseCase[] = [
     href: "/use-cases/event-badges-from-spreadsheet",
   },
   {
-    title: "ID cards",
-    description: "Staff, members, students",
+    title: "Member & event ID-style cards",
+    description: "Staff, members, visitors",
     kind: "id",
     href: "/use-cases/id-cards-from-csv",
   },
@@ -227,7 +227,7 @@ export const homepageFaqs: Faq[] = [
   {
     question: "Can I generate certificates, name badges, and labels?",
     answer:
-      "Yes — certificates, event badges, ID cards, mailing labels, appointment cards, table cards, gift tags, and workshop passes are all just one design plus a row of data. If the layout repeats, this fills the blanks for every row.",
+      "Yes — certificates, event badges, member & event ID-style cards, mailing labels, appointment cards, table cards, gift tags, and workshop passes are all just one design plus a row of data. If the layout repeats, this fills the blanks for every row.",
   },
   {
     question: "Is this a Canva replacement?",
@@ -315,7 +315,7 @@ function PrimaryButton({
 function ManualLoopCard() {
   const painPoints = [
     "Typing each recipient's name into a certificate",
-    "Editing event badges and ID cards one at a time",
+    "Editing event badges and ID-style cards one at a time",
     "Duplicating the same design over and over",
     "Fighting a clunky mail-merge just to export PDFs",
   ];

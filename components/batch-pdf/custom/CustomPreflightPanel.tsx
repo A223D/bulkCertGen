@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState, useRef } from "react";
 import { PreflightSummary } from "./PreflightSummary";
 import { PreflightIssueList, type DisplayIssue } from "./PreflightIssueList";
 import {
@@ -16,6 +16,7 @@ import type { CustomDesignPreflightResult } from "@/lib/batch-pdf/custom/preflig
 import type { CsvRow } from "@/lib/batch-pdf/types";
 
 const MAX_DISPLAY_ISSUES = 100;
+const PREFLIGHT_DEBOUNCE_MS = 150;
 
 type Props = {
   design: DesignAsset;
@@ -26,6 +27,7 @@ type Props = {
   // computed against them so preflight and export share one source of truth.
   exportOptions: ExportOptions;
   onPreflightResultChange?: (result: CustomDesignPreflightResult | null) => void;
+  onJumpToRow?: (rowIndex: number) => void;
 };
 
 export function CustomPreflightPanel({
@@ -35,20 +37,36 @@ export function CustomPreflightPanel({
   fieldBoxes,
   exportOptions,
   onPreflightResultChange,
+  onJumpToRow,
 }: Props) {
+  const [debouncedFieldBoxes, setDebouncedFieldBoxes] = useState(fieldBoxes);
+  const [debouncedExportOptions, setDebouncedExportOptions] = useState(exportOptions);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedFieldBoxes(fieldBoxes);
+      setDebouncedExportOptions(exportOptions);
+    }, PREFLIGHT_DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [fieldBoxes, exportOptions]);
+
   const preflightResult = useMemo(() => {
     if (rows.length === 0) return null;
 
     const result = runCustomDesignPreflight({
       design,
       rows,
-      fieldBoxes,
-      exportOptions,
+      fieldBoxes: debouncedFieldBoxes,
+      exportOptions: debouncedExportOptions,
       csvHeaders,
     });
 
     return result.ok ? result.value : null;
-  }, [design, rows, csvHeaders, fieldBoxes, exportOptions]);
+  }, [design, rows, csvHeaders, debouncedFieldBoxes, debouncedExportOptions]);
 
   // Notify parent whenever preflight result changes.
   useEffect(() => {
@@ -94,7 +112,11 @@ export function CustomPreflightPanel({
       <PreflightSummary result={preflightResult} />
 
       {displayItems.length > 0 ? (
-        <PreflightIssueList items={displayItems} hiddenCount={hiddenIssueCount} />
+        <PreflightIssueList
+          items={displayItems}
+          hiddenCount={hiddenIssueCount}
+          onJumpToRow={onJumpToRow}
+        />
       ) : null}
     </section>
   );

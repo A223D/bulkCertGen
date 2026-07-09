@@ -38,6 +38,8 @@ export function PreflightSummary({ result }: Props) {
     <div className="space-y-3">
       <div
         className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 ${STATUS_BANNER[status]}`}
+        role="status"
+        aria-live="polite"
       >
         <Icon className="mt-0.5 h-4 w-4 shrink-0" />
         <p className="text-sm font-semibold leading-5">{STATUS_MESSAGES[status]}</p>

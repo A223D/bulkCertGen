@@ -87,6 +87,16 @@ describe("resolveDesignItemSizeForPreflight", () => {
     expect(result.value.heightPt).toBeCloseTo(6 * 72, 4);
     expect(result.value.source).toBe("customItemSize");
   });
+
+  it("returns needsOutputSize for image designs below the minimum finished size", () => {
+    const result = resolveDesignItemSizeForPreflight({
+      design: makeImageDesign(),
+      exportOptions: makeImageExportOptions({ customItemWidth: 0.3, customItemHeight: 1 }),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error();
+    expect(result.errors[0].code).toBe("needs_output_size");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -400,7 +410,7 @@ describe("runCustomDesignPreflight - overflow modes", () => {
 
   it("truncation warning is reported and does not block export", () => {
     const truncBox = makeBox({
-      rect: { x: 0.0, y: 0.0, width: 0.02, height: 0.02 },
+      rect: { x: 0.0, y: 0.0, width: 0.02, height: 0.05 },
       style: { ...createDefaultTextBoxStyle(), overflowMode: "truncate", fontSize: 14 },
     });
     const result = runCustomDesignPreflight({
@@ -417,6 +427,32 @@ describe("runCustomDesignPreflight - overflow modes", () => {
     const truncIssues = result.value.issues.filter((i) => i.code === "text_truncated");
     expect(truncIssues.length).toBeGreaterThan(0);
     expect(truncIssues[0].severity).toBe("warning");
+  });
+
+  it("reports text_taller_than_box for truncate text that is taller than its box", () => {
+    const tallBox = makeBox({
+      rect: { x: 0.0, y: 0.0, width: 0.4, height: 0.01 },
+      style: { ...createDefaultTextBoxStyle(), overflowMode: "truncate", fontSize: 24, lineHeight: 1.2 },
+    });
+    const result = runCustomDesignPreflight({
+      design: makeImageDesign(),
+      rows: [makeRow({ name: "Alice" })],
+      fieldBoxes: [tallBox],
+      exportOptions: makeImageExportOptions(),
+      csvHeaders: CSV_HEADERS,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error();
+    expect(result.value.status).toBe("readyWithWarnings");
+    expect(result.value.summary.blocksExport).toBe(false);
+    const tallIssues = result.value.issues.filter((i) => i.code === "text_taller_than_box");
+    expect(tallIssues).toHaveLength(1);
+    expect(tallIssues[0]).toMatchObject({
+      severity: "warning",
+      rowIndex: 0,
+      fieldLabel: "Name",
+      sourceColumn: "name",
+    });
   });
 
   it("wrap warning is reported and does not block when text fits after wrapping", () => {

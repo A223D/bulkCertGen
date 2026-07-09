@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,8 +17,21 @@ function numberValue(value: string): number {
 }
 
 export function TextStyleControls({ style, onChange }: TextStyleControlsProps) {
+  const [colorDraft, setColorDraft] = useState(style.color);
+
+  useEffect(() => {
+    setColorDraft(style.color);
+  }, [style.color]);
+
   function patch(patch: Partial<TextBoxStyle>) {
     onChange({ ...style, ...patch });
+  }
+
+  function handleColorChange(value: string) {
+    setColorDraft(value);
+    if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+      patch({ color: value });
+    }
   }
 
   return (
@@ -50,12 +64,25 @@ export function TextStyleControls({ style, onChange }: TextStyleControlsProps) {
         </label>
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Color</span>
-          <input
-            type="color"
-            value={style.color}
-            onChange={(event) => patch({ color: event.target.value })}
-            className="h-10 w-full rounded-lg border border-line bg-panel px-2 py-1"
-          />
+          <div className="grid grid-cols-[44px_1fr] gap-2">
+            <input
+              type="color"
+              value={style.color}
+              onChange={(event) => handleColorChange(event.target.value)}
+              className="h-10 w-full rounded-lg border border-line bg-panel px-1 py-1"
+              aria-label="Text color picker"
+            />
+            <Input
+              type="text"
+              value={colorDraft}
+              onChange={(event) => handleColorChange(event.target.value)}
+              onBlur={() => {
+                if (!/^#[0-9a-fA-F]{6}$/.test(colorDraft)) setColorDraft(style.color);
+              }}
+              aria-label="Text color hex value"
+              spellCheck={false}
+            />
+          </div>
         </label>
         <label className="space-y-1 text-xs font-medium text-muted-foreground">
           <span>Line height</span>

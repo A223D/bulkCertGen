@@ -128,6 +128,66 @@ describe("parseCustomExportPayload", () => {
     const result = parseCustomExportPayload(rest);
     expect(result.ok).toBe(false);
   });
+
+  it("rejects non-string cell values", () => {
+    const result = parseCustomExportPayload({
+      ...makeValidPayload(),
+      rows: [{ name: 123 }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0].code).toBe("custom_export_invalid_payload");
+      expect(result.errors[0].message).not.toContain("123");
+    }
+  });
+
+  it("rejects cell values longer than the field limit", () => {
+    const privateValue = "A".repeat(BATCH_PDF_LIMITS.maxFieldLength + 1);
+    const result = parseCustomExportPayload({
+      ...makeValidPayload(),
+      rows: [{ name: privateValue }],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0].code).toBe("custom_export_field_too_long");
+      expect(result.errors[0].message).not.toContain(privateValue);
+    }
+  });
+
+  it("rejects too many CSV headers", () => {
+    const csvHeaders = Array.from({ length: BATCH_PDF_LIMITS.maxColumns + 1 }, (_, index) => `column_${index}`);
+    const result = parseCustomExportPayload({
+      ...makeValidPayload(),
+      csvHeaders,
+      rows: [Object.fromEntries(csvHeaders.map((header) => [header, "value"]))],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0].code).toBe("custom_export_invalid_payload");
+    }
+  });
+
+  it("rejects duplicate CSV headers", () => {
+    const result = parseCustomExportPayload({
+      ...makeValidPayload(),
+      csvHeaders: ["name", "name"],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0].code).toBe("custom_export_invalid_payload");
+    }
+  });
+
+  it("rejects non-string CSV headers", () => {
+    const result = parseCustomExportPayload({
+      ...makeValidPayload(),
+      csvHeaders: ["name", 42],
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors[0].code).toBe("custom_export_invalid_payload");
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

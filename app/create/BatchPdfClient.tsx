@@ -18,8 +18,24 @@ import { useGoogleFonts } from "@/components/batch-pdf/custom/fonts/useGoogleFon
 import { cssFontStack } from "@/lib/batch-pdf/custom/fonts/catalog";
 import { normalizedRectToPoints } from "@/lib/batch-pdf/custom/coordinates";
 import { resolveTextFit } from "@/lib/batch-pdf/custom/text-fit";
+import { getTextFitBadge } from "@/lib/batch-pdf/custom/text-fit-badge";
+import {
+  formatPrintSize,
+  getPrintSizeSuitability,
+  summarizePrintSizeSuitability,
+} from "@/lib/batch-pdf/custom/print-size-suitability";
 import { clampPreviewRowIndex } from "@/lib/batch-pdf/preview";
-import { clearSessionCsv, loadSessionCsv } from "@/lib/batch-pdf/session-csv";
+import { parseCsvText, validateCsvFile } from "@/lib/batch-pdf/csv";
+import { decodeCsvBytes } from "@/lib/batch-pdf/csv-decode";
+import { summarizeCsvReplacement } from "@/lib/batch-pdf/csv-replace-summary";
+import { clearSessionCsv, loadSessionCsv, saveSessionCsv } from "@/lib/batch-pdf/session-csv";
+import {
+  clearSessionWizard,
+  loadSessionWizard,
+  resolveRestoredWizardStep,
+  saveSessionWizard,
+  type StoredWizardStep,
+} from "@/lib/batch-pdf/session-wizard";
 import {
   createEmptyCustomDesignState,
   isCustomDesignPreviewReady,
@@ -39,24 +55,29 @@ import {
   resolveExportItemSizePoints,
   resolveSheetLayoutForExport,
 } from "@/lib/batch-pdf/custom/export-options";
+import { describeExportReceipt, type ExportReceipt } from "@/lib/batch-pdf/custom/export-receipt";
 import type { SheetLayoutResult } from "@/lib/batch-pdf/custom/sheet-layout";
 import { BATCH_PDF_LIMITS } from "@/lib/batch-pdf/limits";
-import { getBuiltInDesignByFileName, getBuiltInDesigns } from "@/lib/batch-pdf/built-in-designs";
+import {
+  getBuiltInDesignByFileName,
+  getBuiltInDesigns,
+} from "@/lib/batch-pdf/built-in-designs";
 import type { BuiltInDesign } from "@/lib/batch-pdf/built-in-designs";
+import { getRecommendedFinishedSize, isValidFinishedSize } from "@/lib/batch-pdf/custom/wizard-helpers";
 import type { BatchPdfError, CsvParseResult, CsvRow, FieldMapping } from "@/lib/batch-pdf/types";
 import type { CustomFieldBox, DesignAsset, ExportOptions } from "@/lib/batch-pdf/custom/types";
 import type { CustomDesignPreflightResult } from "@/lib/batch-pdf/custom/preflight";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type BatchPdfStep =
-  | "choose-design"
-  | "setup-design"
-  | "mapping"
-  | "preview"
-  | "export-options"
-  | "export";
+type BatchPdfStep = StoredWizardStep;
 type ExportStatus = "idle" | "loading" | "success" | "error";
+type ExportStage = "uploading" | "rendering" | "packing";
+type LastDownload = {
+  blob: Blob;
+  filename: string;
+  receipt: ExportReceipt;
+};
 
 type SessionState = {
   step: BatchPdfStep;
@@ -179,10 +200,23 @@ function HelpfulTip({
 function ExportLoadingAnimation({
   freeRows,
   isPrintSheets,
+  stage,
 }: {
   freeRows: number;
   isPrintSheets: boolean;
+  stage: ExportStage;
 }) {
+  const stageCopy: Record<ExportStage, string> = {
+    uploading: "Uploading your design...",
+    rendering: `Rendering ${isPrintSheets ? "print sheets" : "pages"}...`,
+    packing: "Packing the download...",
+  };
+  const stageDetail: Record<ExportStage, string> = {
+    uploading: "Sending the design and rows for this export.",
+    rendering: `Personalizing ${freeRows} row${freeRows !== 1 ? "s" : ""}.`,
+    packing: "Preparing the file your browser will download.",
+  };
+
   return (
     <div style={{ textAlign: "center", padding: "18px 0 10px" }}>
       <div
@@ -276,10 +310,10 @@ function ExportLoadingAnimation({
         />
       </div>
       <div style={{ fontSize: 17, fontWeight: 800 }}>
-        Building your {isPrintSheets ? "print sheets" : "PDFs"}...
+        {stageCopy[stage]}
       </div>
       <div style={{ fontSize: 13.5, color: "#6E6A61", marginTop: 7, lineHeight: 1.45 }}>
-        Personalizing {freeRows} row{freeRows !== 1 ? "s" : ""}, checking pages, and packing your files.
+        {stageDetail[stage]}
       </div>
       {MIN_EXPORT_LOADING_MS > 0 && (
         <div style={{ ...MONO, fontSize: 11.5, color: "#9A9486", marginTop: 12 }}>
@@ -328,11 +362,7 @@ const FINISHED_SIZE_PRESETS: FinishedSizePreset[] = [
   },
 ];
 
-// Minimum time the export "loading" state stays up so the download feels steady
-// rather than flashing by. Configurable via NEXT_PUBLIC_MIN_EXPORT_LOADING_MS
-// (milliseconds; inlined at build time). Set to 0 to disable the delay; invalid
-// or negative values fall back to the 7000 ms default.
-const DEFAULT_MIN_EXPORT_LOADING_MS = 7000;
+const DEFAULT_MIN_EXPORT_LOADING_MS = 1200;
 
 function resolveMinExportLoadingMs(): number {
   const raw = process.env.NEXT_PUBLIC_MIN_EXPORT_LOADING_MS;
@@ -379,6 +409,17 @@ function filenameFromResponse(res: Response, fallback: string): string {
   return fallback;
 }
 
+function triggerBrowserDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ── Thumbnail mini-previews ───────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
@@ -411,76 +452,61 @@ function getFinishedSizePresetId(options: ExportOptions): FinishedSizePreset["id
   return "custom";
 }
 
-function getRecommendedFinishedSize(asset: DesignAsset): Pick<ExportOptions, "customItemWidth" | "customItemHeight" | "unit"> {
-  const builtIn = getBuiltInDesignByFileName(asset.fileName);
-  if (builtIn) {
-    return {
-      customItemWidth: builtIn.finishedWidthIn,
-      customItemHeight: builtIn.finishedHeightIn,
-      unit: "in",
-    };
-  }
-
-  const ratio = asset.intrinsicWidth / asset.intrinsicHeight;
-
-  if (ratio > 1.2 && ratio < 1.4 && Math.max(asset.intrinsicWidth, asset.intrinsicHeight) < 1000) {
-    return { customItemWidth: 4, customItemHeight: 3, unit: "in" };
-  }
-
-  if (ratio > 1.2 && ratio < 1.4) {
-    return { customItemWidth: 11, customItemHeight: 8.5, unit: "in" };
-  }
-
-  if (ratio > 0.68 && ratio < 0.75) {
-    return { customItemWidth: 4, customItemHeight: 6, unit: "in" };
-  }
-
-  return { customItemWidth: 8.5, customItemHeight: 11, unit: "in" };
-}
-
-// Assess the uploaded image against the largest finished size it is likely to
-// be printed at (its recommended print size for the design's aspect ratio), so
-// we can warn about blurry output before the user invests time placing fields.
 function DesignDpiNotice({ asset }: { asset: DesignAsset }) {
-  const recommended = getRecommendedFinishedSize(asset);
-  const printWidthIn = recommended.customItemWidth ?? 0;
-  const printHeightIn = recommended.customItemHeight ?? 0;
-  const assessment = assessPrintResolution({
-    intrinsicWidth: asset.intrinsicWidth,
-    intrinsicHeight: asset.intrinsicHeight,
-    printWidthIn,
-    printHeightIn,
-  });
+  const rows = getPrintSizeSuitability(asset);
+  if (rows.length === 0) return null;
 
-  if (!assessment) return null;
-
-  const sizeLabel = `${formatInches(printWidthIn)} × ${formatInches(printHeightIn)} in`;
-
-  if (assessment.level === "low") {
-    return (
-      <div style={{ marginTop: 16, border: "1px solid #F2C9BD", background: "#FBEEEA", borderRadius: 12, padding: "13px 15px", color: "#7A2E1A", fontSize: 13, lineHeight: 1.55 }}>
-        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 4 }}>⚠ This image may print blurry</div>
-        At a typical {sizeLabel} print it works out to about{" "}
-        <strong>{Math.round(assessment.effectiveDpi)} DPI</strong>, below the{" "}
-        {ACCEPTABLE_PRINT_DPI} DPI minimum for a sharp print. For acceptable quality at this size, re-export your design at least{" "}
-        <strong>{assessment.minWidthPxForAcceptable} × {assessment.minHeightPxForAcceptable} px</strong>{" "}
-        ({assessment.idealWidthPx} × {assessment.idealHeightPx} px for crisp {IDEAL_PRINT_DPI} DPI) — or plan to print it smaller.
-      </div>
-    );
-  }
-
-  if (assessment.level === "acceptable") {
-    return (
-      <div style={{ marginTop: 16, border: "1px solid #F0DFA8", background: "#FFFAEB", borderRadius: 12, padding: "13px 15px", color: "#7A5E12", fontSize: 13, lineHeight: 1.55 }}>
-        <strong>About {Math.round(assessment.effectiveDpi)} DPI</strong> at a typical {sizeLabel} print — okay, but not crisp. For best results at this size, use{" "}
-        <strong>{assessment.idealWidthPx} × {assessment.idealHeightPx} px</strong> ({IDEAL_PRINT_DPI} DPI).
-      </div>
-    );
-  }
+  const summary = summarizePrintSizeSuitability(rows);
+  const tone = summary.hasLowOnly ? "danger" : summary.bestSharpSize ? "success" : "warning";
+  const border = tone === "danger" ? "#F2C9BD" : tone === "success" ? "#CDEBD9" : "#F0DFA8";
+  const bg = tone === "danger" ? "#FBEEEA" : tone === "success" ? "#EEF8F1" : "#FFFAEB";
+  const color = tone === "danger" ? "#7A2E1A" : tone === "success" ? "#2E5E43" : "#7A5E12";
+  const title = summary.hasLowOnly
+    ? "This image is only suitable for very small prints"
+    : summary.bestSharpSize
+      ? `Sharp up to ${summary.bestSharpSize.label.toLowerCase()} size`
+      : `Usable up to ${summary.bestAcceptableSize?.label.toLowerCase() ?? "small print"} size`;
+  const body = summary.hasLowOnly
+    ? `All common sizes below are under ${ACCEPTABLE_PRINT_DPI} DPI. Use a higher-resolution export or print smaller than business-card size.`
+    : summary.bestSharpSize
+      ? `This image reaches ${IDEAL_PRINT_DPI} DPI at common sizes through ${formatPrintSize(summary.bestSharpSize.widthIn, summary.bestSharpSize.heightIn)}.`
+      : `This image reaches at least ${ACCEPTABLE_PRINT_DPI} DPI through ${summary.bestAcceptableSize ? formatPrintSize(summary.bestAcceptableSize.widthIn, summary.bestAcceptableSize.heightIn) : "small print sizes"}, but larger prints may look blurry.`;
+  const statusCopy = {
+    ideal: { label: "Sharp", color: "#2E5E43", bg: "#EEF8F1", border: "#CDEBD9" },
+    acceptable: { label: "Okay", color: "#7A5E12", bg: "#FFFAEB", border: "#F0DFA8" },
+    low: { label: "Blurry", color: "#7A2E1A", bg: "#FBEEEA", border: "#F2C9BD" },
+  } as const;
 
   return (
-    <div style={{ marginTop: 16, border: "1px solid #CDEBD9", background: "#EEF8F1", borderRadius: 12, padding: "13px 15px", color: "#2E5E43", fontSize: 13, lineHeight: 1.55 }}>
-      ✓ <strong>About {Math.round(assessment.effectiveDpi)} DPI</strong> at a typical {sizeLabel} print — a good resolution for sharp output.
+    <div style={{ marginTop: 16, border: `1px solid ${border}`, background: bg, borderRadius: 12, padding: "13px 15px", color, fontSize: 13, lineHeight: 1.55 }}>
+      <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 4 }}>{title}</div>
+      <div>{body}</div>
+      <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+        {rows.map((row) => {
+          const status = statusCopy[row.level];
+          return (
+            <div
+              key={row.id}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(120px, 1fr) auto auto",
+                gap: 8,
+                alignItems: "center",
+                border: "1px solid rgba(0,0,0,0.08)",
+                background: "rgba(255,255,255,0.55)",
+                borderRadius: 8,
+                padding: "7px 9px",
+              }}
+            >
+              <span style={{ color: "#1A1916", fontWeight: 700 }}>{row.label}</span>
+              <span style={{ color: "#6E6A61", whiteSpace: "nowrap" }}>{formatPrintSize(row.widthIn, row.heightIn)}</span>
+              <span style={{ ...MONO, justifySelf: "end", border: `1px solid ${status.border}`, background: status.bg, color: status.color, borderRadius: 6, padding: "2px 6px", fontSize: 11, fontWeight: 800 }}>
+                {status.label} · {Math.round(row.effectiveDpi)} DPI
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -491,6 +517,10 @@ function formatInches(value: number): string {
 
 function roundDimension(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function sameStringArray(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 // True when the finished-size shape differs enough from the uploaded design
@@ -635,6 +665,7 @@ function CustomDesignReviewPreview({
               style: box.style,
             });
             const isWrapped = box.style.overflowMode === "wrap" && fit.lineCount > 1;
+            const badge = getTextFitBadge(fit);
             return (
               <div
                 key={box.id}
@@ -668,7 +699,27 @@ function CustomDesignReviewPreview({
                   background: "rgba(255,255,255,0.24)",
                   visibility: pointToPixelScale > 0 ? "visible" : "hidden",
                 }}
-              >
+                >
+                {badge ? (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      right: 2,
+                      borderRadius: 5,
+                      padding: "2px 5px",
+                      background: badge.tone === "danger" ? "#FBEEEA" : "#FFFAEB",
+                      color: badge.tone === "danger" ? "#8A321F" : "#7A5E12",
+                      border: `1px solid ${badge.tone === "danger" ? "#F2C9BD" : "#F0DFA8"}`,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      lineHeight: 1,
+                      pointerEvents: "none",
+                    }}
+                  >
+                    {badge.label}
+                  </span>
+                ) : null}
                 <span
                   style={{
                     display: "block",
@@ -846,7 +897,13 @@ export function BatchPdfClient() {
     customPreflightResult: null,
   });
   const [customExportStatus, setCustomExportStatus] = useState<ExportStatus>("idle");
+  const [customExportStage, setCustomExportStage] = useState<ExportStage>("uploading");
   const [customExportError, setCustomExportError] = useState<string | null>(null);
+  const [lastExportReceipt, setLastExportReceipt] = useState<ExportReceipt | null>(null);
+  const lastDownloadRef = useRef<LastDownload | null>(null);
+  const replaceCsvInputRef = useRef<HTMLInputElement | null>(null);
+  const [replaceCsvNotice, setReplaceCsvNotice] = useState<string | null>(null);
+  const [replaceCsvError, setReplaceCsvError] = useState<string | null>(null);
   const [showCustomSizeInputs, setShowCustomSizeInputs] = useState(false);
   // Keep the finished size proportional to the uploaded design by default so a
   // stretched/distorted print can't happen without an explicit opt-out.
@@ -862,19 +919,158 @@ export function BatchPdfClient() {
 
   // Load CSV from sessionStorage on mount; redirect if missing
   useEffect(() => {
-    const stored = loadSessionCsv();
-    if (!stored) {
-      setAccessState("redirecting");
-      router.replace("/");
+    try {
+      const stored = loadSessionCsv();
+      if (!stored) {
+        setAccessState("redirecting");
+        router.replace("/");
+        return;
+      }
+      const csvResult = stored.asCsvResult();
+      const storedWizard = loadSessionWizard();
+      const wizardMatchesCsv =
+        storedWizard !== null &&
+        storedWizard.csvFileName === stored.fileName &&
+        sameStringArray(storedWizard.csvHeaders, csvResult.headers);
+      if (storedWizard && !wizardMatchesCsv) {
+        clearSessionWizard();
+      }
+      const restoredWizard = wizardMatchesCsv ? storedWizard : null;
+      if (restoredWizard) {
+        setLockAspectRatio(restoredWizard.lockAspectRatio);
+        setShowCustomSizeInputs(getFinishedSizePresetId(restoredWizard.exportOptions) === "custom");
+      }
+      // Syncing the one-time sessionStorage handoff into local state on mount is a
+      // legitimate external-store read; this is the intended use of an effect.
+      // Note: we deliberately do NOT clear sessionStorage here so a mid-flow page
+      // refresh still resumes; it is cleared once a batch export succeeds.
+      setSession((s) => ({
+        ...s,
+        csv: csvResult,
+        csvFileName: stored.fileName,
+        ...(restoredWizard
+          ? {
+              step: resolveRestoredWizardStep(restoredWizard),
+              customDesign: {
+                ...createEmptyCustomDesignState(),
+                asset: restoredWizard.designAsset,
+                fieldBoxes: restoredWizard.fieldBoxes,
+                selectedFieldBoxId: restoredWizard.selectedFieldBoxId,
+              },
+              customExportOptions: restoredWizard.exportOptions,
+              customPreflightResult: null,
+            }
+          : {}),
+      }));
+      setAccessState("ready");
+    } catch {
+      clearSessionWizard();
+      setAccessState("ready");
+    }
+  }, [router]);
+
+  const hasUnsavedWizardWork =
+    session.customDesign.fieldBoxes.length > 0 && customExportStatus !== "success";
+
+  useEffect(() => {
+    if (!hasUnsavedWizardWork) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedWizardWork]);
+
+  useEffect(() => {
+    if (accessState !== "ready" || !session.csv) return;
+    if (customExportStatus === "success") {
+      clearSessionWizard();
       return;
     }
-    // Syncing the one-time sessionStorage handoff into local state on mount is a
-    // legitimate external-store read; this is the intended use of an effect.
-    // Note: we deliberately do NOT clear sessionStorage here so a mid-flow page
-    // refresh still resumes; it is cleared once a batch export succeeds.
-    setSession((s) => ({ ...s, csv: stored.asCsvResult(), csvFileName: stored.fileName }));
-    setAccessState("ready");
-  }, [router]);
+
+    const builtIn = session.customDesign.asset
+      ? getBuiltInDesignByFileName(session.customDesign.asset.fileName)
+      : null;
+    saveSessionWizard({
+      step: session.step,
+      csvFileName: session.csvFileName,
+      csvHeaders: session.csv.headers,
+      fieldBoxes: session.customDesign.fieldBoxes,
+      selectedFieldBoxId: session.customDesign.selectedFieldBoxId,
+      exportOptions: session.customExportOptions,
+      lockAspectRatio,
+      designAsset: session.customDesign.asset,
+      builtInDesignId: builtIn?.id ?? null,
+    });
+  }, [
+    accessState,
+    customExportStatus,
+    lockAspectRatio,
+    session.csv,
+    session.csvFileName,
+    session.customDesign.asset,
+    session.customDesign.fieldBoxes,
+    session.customDesign.selectedFieldBoxId,
+    session.customExportOptions,
+    session.step,
+  ]);
+
+  useEffect(() => {
+    if (accessState !== "ready") return;
+    if (session.customDesign.file || !session.customDesign.asset) return;
+    const builtIn = getBuiltInDesignByFileName(session.customDesign.asset.fileName);
+    if (!builtIn) return;
+    const builtInDesign = builtIn;
+
+    let cancelled = false;
+    setLoadingBuiltInDesignId(builtInDesign.id);
+    setBuiltInDesignError(null);
+
+    async function restoreBuiltInDesign() {
+      try {
+        const response = await fetch(builtInDesign.publicPath);
+        if (!response.ok) throw new Error("asset_fetch_failed");
+        const blob = await response.blob();
+        const file = new File([blob], builtInDesign.fileName, { type: "image/png" });
+        const previewUrl = URL.createObjectURL(file);
+        if (cancelled) {
+          URL.revokeObjectURL(previewUrl);
+          return;
+        }
+
+        setSession((s) => {
+          if (s.customDesign.file || s.customDesign.asset?.fileName !== builtInDesign.fileName) {
+            URL.revokeObjectURL(previewUrl);
+            return s;
+          }
+          return {
+            ...s,
+            customDesign: {
+              ...s.customDesign,
+              file,
+              previewUrl,
+              previewStatus: "ready",
+              errors: [],
+            },
+          };
+        });
+      } catch {
+        if (!cancelled) {
+          setBuiltInDesignError("That saved design could not be restored. Choose it again to continue.");
+        }
+      } finally {
+        if (!cancelled) setLoadingBuiltInDesignId(null);
+      }
+    }
+
+    restoreBuiltInDesign();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessState, session.customDesign.asset, session.customDesign.file]);
 
   // ── Computed ───────────────────────────────────────────────────────────────
 
@@ -897,9 +1093,11 @@ export function BatchPdfClient() {
     !isImageDesign ||
     (session.customExportOptions.itemSizeMode === "custom" &&
       typeof session.customExportOptions.customItemWidth === "number" &&
-      session.customExportOptions.customItemWidth > 0 &&
       typeof session.customExportOptions.customItemHeight === "number" &&
-      session.customExportOptions.customItemHeight > 0);
+      isValidFinishedSize(
+        session.customExportOptions.customItemWidth,
+        session.customExportOptions.customItemHeight,
+      ));
 
   // Resolve a print-sheet layout preview for the current options + design.
   const sheetLayoutInfo = useMemo<SheetLayoutInfo | null>(() => {
@@ -924,6 +1122,17 @@ export function BatchPdfClient() {
   }, [session.customDesign.asset, session.customExportOptions, freeRows]);
 
   const layoutCanCalculate = !isPrintSheets || sheetLayoutInfo !== null;
+  const placementItemWidthPt = useMemo(() => {
+    const design = session.customDesign.asset;
+    if (!design) return undefined;
+
+    const itemSize = resolveExportItemSizePoints({
+      exportOptions: session.customExportOptions,
+      designAsset: design,
+    });
+
+    return itemSize.ok ? itemSize.value.widthPt : undefined;
+  }, [session.customDesign.asset, session.customExportOptions]);
 
   const isCustomTextFitReady =
     Boolean(session.csv) &&
@@ -948,11 +1157,21 @@ export function BatchPdfClient() {
     setSession((s) => ({ ...s, step }));
   }
 
+  function confirmLeaveWizard(): boolean {
+    if (!hasUnsavedWizardWork) return true;
+    return window.confirm("Leave this batch and return to CSV upload?");
+  }
+
+  function goToCsvUpload() {
+    if (!confirmLeaveWizard()) return;
+    router.push("/");
+  }
+
   function buildSteps(): WizardStep[] {
     const stepOrder = CUSTOM_STEP_ORDER;
     const currentIdx = Math.max(0, stepOrder.indexOf(session.step));
     return [
-      { n: 1, label: "Upload CSV", state: "complete", onClick: () => router.push("/") },
+      { n: 1, label: "Upload CSV", state: "complete", onClick: goToCsvUpload },
       ...stepOrder.map((stepKey, i) => ({
         n: i + 2,
         label: STEP_LABELS[stepKey],
@@ -990,6 +1209,13 @@ export function BatchPdfClient() {
     }));
   }
 
+  function handleSetPreviewRow(rowIndex: number) {
+    setSession((s) => ({
+      ...s,
+      previewRowIndex: clampPreviewRowIndex(rowIndex, s.csv?.rows.length ?? 0),
+    }));
+  }
+
   function handleContinueToExport() {
     setSession((s) => ({ ...s, step: "export-options" }));
   }
@@ -1001,13 +1227,30 @@ export function BatchPdfClient() {
   const handleCustomDesignAcceptedFile = useCallback((file: File) => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setShowCustomSizeInputs(false);
     setSession((s) => {
       if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
+      const restoringUploadedDesign =
+        !s.customDesign.file &&
+        Boolean(s.customDesign.asset) &&
+        s.customDesign.fieldBoxes.length > 0;
       return {
         ...s,
-        customDesign: { ...resetCustomDesignState(), file, previewStatus: "loading" },
-        customExportOptions: createDefaultExportOptions(),
+        customDesign: restoringUploadedDesign
+          ? {
+              ...s.customDesign,
+              file,
+              previewUrl: null,
+              previewStatus: "loading",
+              errors: [],
+              warnings: [],
+            }
+          : { ...resetCustomDesignState(), file, previewStatus: "loading" },
+        customExportOptions: restoringUploadedDesign
+          ? s.customExportOptions
+          : createDefaultExportOptions(),
         customPreflightResult: null,
       };
     });
@@ -1016,6 +1259,8 @@ export function BatchPdfClient() {
   const handleCustomDesignRejectedFile = useCallback((errors: BatchPdfError[]) => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setShowCustomSizeInputs(false);
     setSession((s) => {
       if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
@@ -1031,6 +1276,8 @@ export function BatchPdfClient() {
   const handleCustomDesignReset = useCallback(() => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setShowCustomSizeInputs(false);
     setSession((s) => {
       if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
@@ -1046,6 +1293,8 @@ export function BatchPdfClient() {
   const handleStartUploadOwn = useCallback(() => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setShowCustomSizeInputs(false);
     setSession((s) => {
       if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
@@ -1064,6 +1313,8 @@ export function BatchPdfClient() {
   const handleReplaceDesign = useCallback(() => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setShowCustomSizeInputs(false);
     setSession((s) => {
       if (s.customDesign.previewUrl) URL.revokeObjectURL(s.customDesign.previewUrl);
@@ -1083,6 +1334,8 @@ export function BatchPdfClient() {
     setBuiltInDesignError(null);
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setShowCustomSizeInputs(false);
 
     try {
@@ -1116,6 +1369,9 @@ export function BatchPdfClient() {
       // points — choose a friendly best-guess print size when the shape is clear.
       const needsCustomItemSize = asset.intrinsicUnit === "px";
       if (!needsCustomItemSize) {
+        return { ...s, customDesign: { ...s.customDesign, asset, errors: [] } };
+      }
+      if (s.customDesign.asset && s.customDesign.fieldBoxes.length > 0) {
         return { ...s, customDesign: { ...s.customDesign, asset, errors: [] } };
       }
 
@@ -1162,6 +1418,10 @@ export function BatchPdfClient() {
   }, []);
 
   const handleCustomFieldBoxesChange = useCallback((fieldBoxes: CustomFieldBox[]) => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setSession((s) => ({
       ...s,
       customDesign: {
@@ -1181,10 +1441,16 @@ export function BatchPdfClient() {
   const handleCustomExportOptionsChange = useCallback((options: ExportOptions) => {
     setCustomExportStatus("idle");
     setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setSession((s) => ({ ...s, customExportOptions: options }));
   }, []);
 
   const handleFinishedSizePresetChange = useCallback((preset: FinishedSizePreset) => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setShowCustomSizeInputs(preset.id === "custom");
 
     if (preset.id === "custom") {
@@ -1224,6 +1490,8 @@ export function BatchPdfClient() {
       const value = raw ? Number.parseFloat(raw) : undefined;
       setCustomExportStatus("idle");
       setCustomExportError(null);
+      setLastExportReceipt(null);
+      lastDownloadRef.current = null;
       setSession((s) => {
         const opts = s.customExportOptions;
         const asset = s.customDesign.asset;
@@ -1253,6 +1521,10 @@ export function BatchPdfClient() {
   );
 
   const handleToggleAspectLock = useCallback((locked: boolean) => {
+    setCustomExportStatus("idle");
+    setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     setLockAspectRatio(locked);
     if (!locked) return;
     // Re-lock: snap height to the design's proportions using the current width.
@@ -1288,7 +1560,10 @@ export function BatchPdfClient() {
     if (!csv || !customDesign.asset || !customDesign.file) return;
     const exportStartedAt = Date.now();
     setCustomExportStatus("loading");
+    setCustomExportStage("uploading");
     setCustomExportError(null);
+    setLastExportReceipt(null);
+    lastDownloadRef.current = null;
     try {
       const payload = {
         mode: "free" as const,
@@ -1308,35 +1583,135 @@ export function BatchPdfClient() {
           const body = await res.json();
           if (typeof body?.error === "string") msg = body.error;
         } catch { /* ignore */ }
-        await waitForMinimumExportLoading(exportStartedAt);
         setCustomExportError(msg);
         setCustomExportStatus("error");
         return;
       }
+      setCustomExportStage("rendering");
       const blob = await res.blob();
+      setCustomExportStage("packing");
       await waitForMinimumExportLoading(exportStartedAt);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      // The endpoint returns either a single PDF (combined output) or a ZIP
-      // (separate files / print sheets / report included). Honor what the
-      // server actually sent instead of assuming .zip.
-      a.download = filenameFromResponse(res, "batch-pdf-custom-export.zip");
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const filename = filenameFromResponse(res, "batch-pdf-custom-export.zip");
+      const receipt = describeExportReceipt({
+        exportOptions: customExportOptions,
+        rowCount: freeRows,
+        filename,
+        sheetLayoutInfo,
+      });
+      triggerBrowserDownload(blob, filename);
+      lastDownloadRef.current = { blob, filename, receipt };
+      setLastExportReceipt(receipt);
       // The batch is done. Drop the one-time CSV handoff so this completed batch
       // can't be silently re-entered by navigating directly to /create; a new
       // batch must start from the homepage upload. The current view keeps
       // working because the CSV is still held in React state.
       clearSessionCsv();
+      clearSessionWizard();
       setCustomExportStatus("success");
     } catch {
-      await waitForMinimumExportLoading(exportStartedAt);
       setCustomExportStatus("error");
       setCustomExportError("Something went wrong. Check your connection and try again.");
     }
+  }
+
+  function handleDownloadAgain() {
+    const lastDownload = lastDownloadRef.current;
+    if (!lastDownload) {
+      void handleCustomExport();
+      return;
+    }
+
+    triggerBrowserDownload(lastDownload.blob, lastDownload.filename);
+    setLastExportReceipt(lastDownload.receipt);
+  }
+
+  function handleReplaceCsvFile(file: File) {
+    const validation = validateCsvFile(file);
+    if (!validation.ok) {
+      setReplaceCsvError(validation.errors[0]?.message ?? "Choose a valid CSV file.");
+      setReplaceCsvNotice(null);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = decodeCsvBytes(reader.result as ArrayBuffer);
+      const result = parseCsvText(text);
+      if (!result.ok) {
+        setReplaceCsvError(result.errors[0]?.message ?? "We could not read that CSV.");
+        setReplaceCsvNotice(null);
+        return;
+      }
+
+      const previousFileName = session.csvFileName || "previous CSV";
+      const previousRows = session.csv?.rowCount ?? 0;
+      const nextCsv = result.value;
+      const replacementSummary = summarizeCsvReplacement({
+        previousFileName,
+        previousRowCount: previousRows,
+        nextFileName: file.name,
+        nextRowCount: nextCsv.rowCount,
+        nextHeaders: nextCsv.headers,
+        fieldBoxes: session.customDesign.fieldBoxes,
+      });
+
+      saveSessionCsv(nextCsv, file.name);
+      setCustomExportStatus("idle");
+      setCustomExportError(null);
+      setLastExportReceipt(null);
+      lastDownloadRef.current = null;
+      setReplaceCsvError(null);
+      setReplaceCsvNotice(replacementSummary.notice);
+      setSession((s) => ({
+        ...s,
+        csv: nextCsv,
+        csvFileName: file.name,
+        previewRowIndex: clampPreviewRowIndex(s.previewRowIndex, nextCsv.rows.length),
+        customPreflightResult: null,
+      }));
+    };
+    reader.onerror = () => {
+      setReplaceCsvError("We couldn't open that file. Try saving a fresh copy.");
+      setReplaceCsvNotice(null);
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function handleReplaceCsvInput(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) handleReplaceCsvFile(file);
+    event.target.value = "";
+  }
+
+  function renderMissingDesignFilePanel(asset: DesignAsset) {
+    const builtIn = getBuiltInDesignByFileName(asset.fileName);
+    const isRestoringBuiltIn = Boolean(builtIn && loadingBuiltInDesignId === builtIn.id);
+
+    return (
+      <div style={{ maxWidth: 680, margin: "0 auto", textAlign: "center" }}>
+        <div style={STEP_LABEL_STYLE}>Restoring design</div>
+        <h2 style={H2}>{isRestoringBuiltIn ? "Reloading your design…" : "Re-add your design file"}</h2>
+        <p style={{ ...SUBTEXT, maxWidth: 540, margin: "0 auto 20px" }}>
+          {isRestoringBuiltIn
+            ? "Your fields and export settings were restored. The built-in design image is loading now."
+            : "Your fields and export settings were restored, but browser storage cannot keep uploaded image files. Re-add the same PNG or JPEG design to continue."}
+        </p>
+        {builtInDesignError ? (
+          <div style={{ border: "1px solid #F2C9BD", background: "#FBEEEA", borderRadius: 12, padding: "11px 14px", color: "#7A2E1A", fontSize: 13, marginBottom: 16 }}>
+            {builtInDesignError}
+          </div>
+        ) : null}
+        {isRestoringBuiltIn ? (
+          <div role="status" aria-live="polite" style={{ color: "#8A857A", fontSize: 14 }}>
+            Loading…
+          </div>
+        ) : (
+          <Button type="button" variant="primary" onClick={() => goToStep("setup-design")}>
+            Re-add design file
+          </Button>
+        )}
+      </div>
+    );
   }
 
   // ── Step renders ───────────────────────────────────────────────────────────
@@ -1548,7 +1923,7 @@ export function BatchPdfClient() {
         </div>
 
         <div style={{ textAlign: "center", marginTop: 24 }}>
-          <Button type="button" variant="ghost" size="sm" onClick={() => router.push("/")}>
+          <Button type="button" variant="ghost" size="sm" onClick={goToCsvUpload}>
             ← Back to CSV upload
           </Button>
         </div>
@@ -1559,6 +1934,8 @@ export function BatchPdfClient() {
   const renderStep3b = () => {
     const { customDesign } = session;
     const hasFile = Boolean(customDesign.file);
+    const needsRestoredDesignFile =
+      !hasFile && Boolean(customDesign.asset) && customDesign.fieldBoxes.length > 0;
     return (
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <div style={{ textAlign: "center" }}>
@@ -1571,7 +1948,9 @@ export function BatchPdfClient() {
           </p>
           {!hasFile && (
             <HelpfulTip style={{ maxWidth: 560, margin: "0 auto 20px", textAlign: "left" }}>
-              Designs work best when they already have clear blank spaces for names, dates, roles, or table numbers.
+              {needsRestoredDesignFile
+                ? "Your field boxes and export settings were restored. Re-add the same PNG or JPEG design file to continue."
+                : "Designs work best when they already have clear blank spaces for names, dates, roles, or table numbers."}
             </HelpfulTip>
           )}
         </div>
@@ -1676,6 +2055,7 @@ export function BatchPdfClient() {
           csvHeaders={session.csv.headers}
           boxes={customDesign.fieldBoxes}
           selectedBoxId={customDesign.selectedFieldBoxId}
+          itemWidthPt={placementItemWidthPt}
           onBoxesChange={handleCustomFieldBoxesChange}
           onSelectedBoxChange={handleSelectedFieldBoxChange}
         />
@@ -1694,7 +2074,8 @@ export function BatchPdfClient() {
 
   const renderStep5b = () => {
     const { customDesign, csv } = session;
-    if (!customDesign.asset || !customDesign.file || !csv) return null;
+    if (!customDesign.asset || !csv) return null;
+    if (!customDesign.file) return renderMissingDesignFilePanel(customDesign.asset);
 
     const asset = customDesign.asset;
     const canContinue = isCustomTextFitReady;
@@ -1733,10 +2114,21 @@ export function BatchPdfClient() {
         <div style={STEP_LABEL_STYLE}>Step 5 · Preview</div>
         <h2 style={H2}>Does this look right?</h2>
         <p style={{ ...SUBTEXT, maxWidth: 680 }}>Confirm the finished size and check that the text fits before you export.</p>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => replaceCsvInputRef.current?.click()}>
+            Replace spreadsheet
+          </Button>
+          {replaceCsvNotice ? (
+            <span style={{ fontSize: 12.5, color: "#2E5E43", fontWeight: 700 }}>{replaceCsvNotice}</span>
+          ) : null}
+          {replaceCsvError ? (
+            <span role="alert" style={{ fontSize: 12.5, color: "#B5482E", fontWeight: 700 }}>{replaceCsvError}</span>
+          ) : null}
+        </div>
 
         {/* Full-width status banner pinned to the top so fit errors can't be missed. */}
         <div data-rsticky style={{ position: "sticky", top: 118, zIndex: 20, marginBottom: 18 }}>
-          <div style={{ background: sBg, border: `1px solid ${sBorder}`, borderLeft: `5px solid ${sAccent}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", boxShadow: "0 14px 30px -22px rgba(26,25,22,0.55)" }}>
+          <div role="status" aria-live="polite" style={{ background: sBg, border: `1px solid ${sBorder}`, borderLeft: `5px solid ${sAccent}`, borderRadius: 16, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", boxShadow: "0 14px 30px -22px rgba(26,25,22,0.55)" }}>
             <span style={{ width: 36, height: 36, borderRadius: 10, background: sAccent, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, flexShrink: 0 }}>{sIcon}</span>
             <div style={{ flex: "1 1 240px", minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: sAccent }}>{sTitle}</div>
@@ -1895,6 +2287,7 @@ export function BatchPdfClient() {
               fieldBoxes={customDesign.fieldBoxes}
               exportOptions={session.customExportOptions}
               onPreflightResultChange={handleCustomPreflightResultChange}
+              onJumpToRow={handleSetPreviewRow}
             />
           </aside>
         </div>
@@ -1905,6 +2298,7 @@ export function BatchPdfClient() {
   const renderCustomExportOptionsStep = () => {
     const { customDesign, csv } = session;
     if (!customDesign.asset || !csv) return null;
+    if (!customDesign.file) return renderMissingDesignFilePanel(customDesign.asset);
 
     const hasWarnings = preflightStatus === "readyWithWarnings";
     const canExport = isCustomExportReady;
@@ -1933,6 +2327,17 @@ export function BatchPdfClient() {
         <p style={{ ...SUBTEXT, maxWidth: 680 }}>
           Give each one its own page, or fit several on a page so you can print and cut them out.
         </p>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+          <Button type="button" variant="secondary" size="sm" onClick={() => replaceCsvInputRef.current?.click()}>
+            Replace spreadsheet
+          </Button>
+          {replaceCsvNotice ? (
+            <span style={{ fontSize: 12.5, color: "#2E5E43", fontWeight: 700 }}>{replaceCsvNotice}</span>
+          ) : null}
+          {replaceCsvError ? (
+            <span role="alert" style={{ fontSize: 12.5, color: "#B5482E", fontWeight: 700 }}>{replaceCsvError}</span>
+          ) : null}
+        </div>
         <HelpfulTip style={{ maxWidth: 720, marginBottom: 16 }}>
           Choose one per page for certificates. Choose several on a page for badges, tickets, labels, and anything you will cut out after printing.
         </HelpfulTip>
@@ -1965,7 +2370,7 @@ export function BatchPdfClient() {
           </div>
 
           <aside data-raside style={{ position: "sticky", top: 130 }}>
-            <div style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderLeft: `5px solid ${statusAccent}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
+            <div role="status" aria-live="polite" style={{ background: statusBg, border: `1px solid ${statusBorder}`, borderLeft: `5px solid ${statusAccent}`, borderRadius: 16, padding: 18, marginBottom: 14 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ width: 32, height: 32, borderRadius: 9, background: statusAccent, color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 800, flexShrink: 0 }}>{statusIcon}</span>
                 <span style={{ fontSize: 16, fontWeight: 800, color: statusAccent }}>{statusTitle}</span>
@@ -1989,6 +2394,10 @@ export function BatchPdfClient() {
   };
 
   const renderStep6 = () => {
+    if (session.customDesign.asset && !session.customDesign.file) {
+      return renderMissingDesignFilePanel(session.customDesign.asset);
+    }
+
     const exportStatus = customExportStatus;
     const exportError = customExportError;
     const ptToIn = (pt: number) => `${(pt / 72).toFixed(2)} in`;
@@ -2048,7 +2457,11 @@ export function BatchPdfClient() {
           )}
 
           {exportStatus === "loading" && (
-            <ExportLoadingAnimation freeRows={freeRows} isPrintSheets={isPrintSheets} />
+            <ExportLoadingAnimation
+              freeRows={freeRows}
+              isPrintSheets={isPrintSheets}
+              stage={customExportStage}
+            />
           )}
 
           {exportStatus === "success" && (
@@ -2058,7 +2471,25 @@ export function BatchPdfClient() {
               <div style={{ fontSize: 14, color: "#6E6A61", marginTop: 6 }}>
                 {freeRows} personalized PDF{freeRows !== 1 ? "s" : ""} downloaded.
               </div>
-              <Button type="button" variant="primary" size="lg" fullWidth onClick={handleCustomExport} className="mt-5 text-base">↓ Download again</Button>
+              {lastExportReceipt ? (
+                <div style={{ marginTop: 16, textAlign: "left", border: "1px solid #E7E2D6", background: "#FCFBF7", borderRadius: 14, padding: "12px 14px" }}>
+                  {([
+                    ["File", lastExportReceipt.filename],
+                    ["Format", lastExportReceipt.formatLabel],
+                    ["Inside", lastExportReceipt.contentsLabel],
+                  ] as [string, string][]).map(([label, value]) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "7px 0", borderBottom: "1px solid #F4F1E9" }}>
+                      <span style={{ fontSize: 12.5, color: "#6E6A61" }}>{label}</span>
+                      <span style={{ ...MONO, fontSize: 12.5, fontWeight: 700, color: "#1A1916", textAlign: "right", wordBreak: "break-word" }}>{value}</span>
+                    </div>
+                  ))}
+                  <p style={{ margin: "10px 0 0", fontSize: 12.5, lineHeight: 1.5, color: "#6E6A61" }}>
+                    {lastExportReceipt.downloadHint}
+                    {lastExportReceipt.zipHint ? ` ${lastExportReceipt.zipHint}` : ""}
+                  </p>
+                </div>
+              ) : null}
+              <Button type="button" variant="primary" size="lg" fullWidth onClick={handleDownloadAgain} className="mt-5 text-base">↓ Download again</Button>
               <Button type="button" variant="secondary" fullWidth onClick={() => router.push("/")} className="mt-2">Start a new batch</Button>
             </div>
           )}
@@ -2108,6 +2539,13 @@ export function BatchPdfClient() {
 
   return (
     <div>
+      <input
+        ref={replaceCsvInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        onChange={handleReplaceCsvInput}
+        style={{ display: "none" }}
+      />
       <UtilityStepper steps={buildSteps()} />
 
       <div

@@ -6,6 +6,7 @@ import {
   parseCsvText,
   validateCsvFile,
 } from "../../lib/batch-pdf/csv.ts";
+import { decodeCsvBytes } from "../../lib/batch-pdf/csv-decode.ts";
 import {
   getAllSampleCsvs,
   getSampleCsvByTemplateId,
@@ -34,7 +35,29 @@ function assertParseError(csvText: string) {
   return result.errors;
 }
 
+function arrayBufferFromBytes(values: number[]): ArrayBuffer {
+  const bytes = Uint8Array.from(values);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
 describe("CSV utilities", () => {
+  it("decodes Windows-1252 CSV bytes without replacement characters", () => {
+    const text = decodeCsvBytes(arrayBufferFromBytes([0x6e, 0x61, 0x6d, 0x65, 0x0a, 0x4a, 0x6f, 0x73, 0xe9]));
+    expect(text).toBe("name\nJosé");
+    expect(text).not.toContain("\ufffd");
+  });
+
+  it("strips a UTF-8 BOM while decoding CSV bytes", () => {
+    const body = new TextEncoder().encode("name\nMüller");
+    const text = decodeCsvBytes(arrayBufferFromBytes([0xef, 0xbb, 0xbf, ...body]));
+    expect(text).toBe("name\nMüller");
+  });
+
+  it("decodes plain UTF-8 CSV bytes", () => {
+    const text = decodeCsvBytes(new TextEncoder().encode("name\nÇağla").buffer);
+    expect(text).toBe("name\nÇağla");
+  });
+
   it("normalizes headers and cell values", () => {
     expect(normalizeHeader(" name ")).toBe("name");
     expect(normalizeCellValue(" Jane Smith ")).toBe("Jane Smith");
@@ -118,6 +141,27 @@ describe("CSV utilities", () => {
     const errors = assertParseError("name,,course\nJane,,Intro");
 
     expect(errors[0].code).toBe("csv_blank_header");
+  });
+
+  it("detects a likely title row before the CSV headers", () => {
+    const errors = assertParseError("Attendance May 2026\nname,course\nAda,Math");
+
+    expect(errors[0].code).toBe("csv_title_row");
+    expect(errors[0].message).toMatch(/row 1/i);
+    expect(errors[0].message).toMatch(/title/i);
+  });
+
+  it("reports the row number when a data row has too many non-empty cells", () => {
+    const errors = assertParseError("name,course\nAda,Math,Extra");
+
+    expect(errors[0].code).toBe("csv_row_too_wide");
+    expect(errors[0].message).toMatch(/row 2/i);
+  });
+
+  it("allows trailing empty cells beyond the header width", () => {
+    const result = assertParseOk("name,course\nAda,Math,");
+
+    expect(result.rows[0]).toEqual({ name: "Ada", course: "Math" });
   });
 
   it("rejects too many columns", () => {

@@ -89,7 +89,7 @@ function orientSize(widthPt: number, heightPt: number, orientation: ExportOption
   return applyOrientation({ widthPt, heightPt, orientation: concreteOrientation(orientation) });
 }
 
-function measurementToInches(value: number, unit: MeasurementUnit): number {
+export function measurementToInches(value: number, unit: MeasurementUnit): number {
   return unit === "in" ? value : value / 25.4;
 }
 

@@ -4,8 +4,10 @@ import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { parseCsvText, validateCsvFile } from "@/lib/batch-pdf/csv";
+import { decodeCsvBytes } from "@/lib/batch-pdf/csv-decode";
+import { analyzeCsvInsights } from "@/lib/batch-pdf/csv-insights";
 import { saveSessionCsv } from "@/lib/batch-pdf/session-csv";
-import type { CsvParseResult } from "@/lib/batch-pdf/types";
+import type { BatchPdfError, CsvParseResult } from "@/lib/batch-pdf/types";
 
 const HERO_SAMPLE_CSV = [
   "full_name,course_name,issue_date,instructor,credential_id",
@@ -29,6 +31,42 @@ function getTruncationWarning(csv: CsvParseResult | null) {
   return csv?.warnings.find((warning) => warning.code === "csv_rows_truncated") ?? null;
 }
 
+function csvErrorAdvice(error: BatchPdfError | null): string {
+  switch (error?.code) {
+    case "csv_title_row":
+      return "In Excel or Sheets, delete any title rows above your column names, then export the sheet as CSV again.";
+    case "csv_row_too_wide":
+      return "Check the row named in the message for an extra comma or extra cell.";
+    case "csv_blank_header":
+    case "csv_missing_header":
+      return "Make sure row 1 contains a name for every column you want to use.";
+    case "csv_duplicate_header":
+      return "Rename duplicate column headers so each column has a unique name.";
+    case "csv_too_many_columns":
+      return "Remove columns you will not place on the design, then export a fresh CSV.";
+    case "csv_field_too_long":
+      return "Shorten the cell named in the message to 300 characters or fewer.";
+    case "csv_file_too_large":
+      return "Split the spreadsheet into smaller CSV files and process one batch at a time.";
+    case "csv_invalid_extension":
+      return "Choose File > Download > CSV in Sheets, or Save as CSV from Excel.";
+    default:
+      return "Use a plain CSV with one header row and one item per row.";
+  }
+}
+
+function downloadSampleCsv() {
+  const blob = new Blob([HERO_SAMPLE_CSV], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "sample-certificates.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function HeroCsvCard() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -36,14 +74,18 @@ export function HeroCsvCard() {
   const [csvResult, setCsvResult] = useState<CsvParseResult | null>(null);
   const [fileName, setFileName] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [lastError, setLastError] = useState<BatchPdfError | null>(null);
 
   const ingest = useCallback((text: string, name: string) => {
     const result = parseCsvText(text);
     if (!result.ok) {
-      setErrorMsg(result.errors[0]?.message ?? "Could not read that CSV.");
+      const error = result.errors[0] ?? null;
+      setLastError(error);
+      setErrorMsg(error?.message ?? "Could not read that CSV.");
       setUploadState("error");
       return;
     }
+    setLastError(null);
     setCsvResult(result.value);
     setFileName(name);
     setUploadState("success");
@@ -53,7 +95,9 @@ export function HeroCsvCard() {
     (file: File) => {
       const validation = validateCsvFile(file);
       if (!validation.ok) {
-        setErrorMsg(validation.errors[0]?.message ?? "Invalid file.");
+        const error = validation.errors[0] ?? null;
+        setLastError(error);
+        setErrorMsg(error?.message ?? "Invalid file.");
         setUploadState("error");
         return;
       }
@@ -61,13 +105,15 @@ export function HeroCsvCard() {
       setUploadState("parsing");
       const reader = new FileReader();
       reader.onload = () => {
-        ingest(reader.result as string, file.name);
+        const text = decodeCsvBytes(reader.result as ArrayBuffer);
+        ingest(text, file.name);
       };
       reader.onerror = () => {
+        setLastError(null);
         setErrorMsg("We couldn't open that file. Try saving a fresh copy.");
         setUploadState("error");
       };
-      reader.readAsText(file);
+      reader.readAsArrayBuffer(file);
     },
     [ingest],
   );
@@ -102,6 +148,7 @@ export function HeroCsvCard() {
     setCsvResult(null);
     setFileName("");
     setErrorMsg("");
+    setLastError(null);
     setUploadState("empty");
   };
 
@@ -140,7 +187,7 @@ export function HeroCsvCard() {
             flexShrink: 0,
           }}
         >
-          Step 1 of 6
+          Step 1 of 7
         </span>
       </div>
       <div style={{ fontSize: 14, color: "#6E6A61", marginBottom: 18 }}>
@@ -218,6 +265,9 @@ export function HeroCsvCard() {
               Try sample CSV
             </Button>
           </div>
+          <Button type="button" variant="ghost" size="sm" fullWidth onClick={downloadSampleCsv} className="mt-2">
+            Download sample CSV
+          </Button>
         </>
       )}
 
@@ -294,7 +344,7 @@ export function HeroCsvCard() {
                 {fileName}
               </div>
               <div style={{ fontSize: 12.5, color: "#3F7A57", fontWeight: 600, marginTop: 2 }}>
-              Spreadsheet looks good — ready to choose a template
+              Spreadsheet looks good — ready to choose a design
               </div>
             </div>
           </div>
@@ -367,6 +417,30 @@ export function HeroCsvCard() {
             </div>
           ) : null}
 
+          {analyzeCsvInsights(csvResult).length > 0 ? (
+            <div style={{ marginTop: 14, display: "grid", gap: 7 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#6E6A61" }}>
+                Spreadsheet notes
+              </div>
+              {analyzeCsvInsights(csvResult).slice(0, 4).map((insight) => (
+                <div
+                  key={`${insight.code}-${insight.message}`}
+                  style={{
+                    border: `1px solid ${insight.severity === "warning" ? "#F0DFA8" : "#E7E2D6"}`,
+                    background: insight.severity === "warning" ? "#FFFAEB" : "#FCFBF7",
+                    color: insight.severity === "warning" ? "#7A5E12" : "#6E6A61",
+                    borderRadius: 10,
+                    padding: "8px 10px",
+                    fontSize: 12.5,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {insight.message}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 12 }}>
             {csvResult.headers.map((col) => (
               <span
@@ -384,6 +458,41 @@ export function HeroCsvCard() {
                 {col}
               </span>
             ))}
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#6E6A61", marginBottom: 7 }}>
+              First rows we found
+            </div>
+            <div style={{ overflowX: "auto", border: "1px solid #EFEADF", borderRadius: 12, background: "#FFFFFF" }}>
+              <table style={{ width: "100%", minWidth: Math.max(360, csvResult.headers.length * 120), borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    {csvResult.headers.map((header) => (
+                      <th key={header} style={{ padding: "8px 10px", textAlign: "left", color: "#6E6A61", background: "#FCFBF7", borderBottom: "1px solid #EFEADF", fontWeight: 800 }}>
+                        {header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvResult.rows.slice(0, 3).map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {csvResult.headers.map((header) => (
+                        <td key={header} style={{ padding: "8px 10px", color: "#1A1916", borderTop: rowIndex === 0 ? 0 : "1px solid #F4F1E9", maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {row[header] || "—"}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {csvResult.rowCount > 3 ? (
+              <div style={{ fontSize: 12, color: "#8A857A", marginTop: 6 }}>
+                ...and {csvResult.rowCount - 3} more row{csvResult.rowCount - 3 !== 1 ? "s" : ""}.
+              </div>
+            ) : null}
           </div>
 
           <Button type="button" variant="primary" size="lg" fullWidth onClick={continueToWizard} className="mt-4">
@@ -420,8 +529,14 @@ export function HeroCsvCard() {
           <div style={{ fontSize: 13.5, color: "#9A5440", marginTop: 8, lineHeight: 1.5 }}>
             {errorMsg}
           </div>
+          <div style={{ fontSize: 13, color: "#7A2E1A", marginTop: 8, lineHeight: 1.5 }}>
+            {csvErrorAdvice(lastError)}
+          </div>
           <Button type="button" variant="primary" onClick={reset} className="mt-3.5">
             Try another file
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={downloadSampleCsv} className="ml-2 mt-3.5">
+            Download sample CSV
           </Button>
         </div>
       )}

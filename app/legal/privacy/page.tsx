@@ -29,6 +29,20 @@ export default function PrivacyPage() {
           this browser session while you move from the homepage into the creation
           flow, and it is cleared after a successful export.
         </p>
+        <h2 className="mt-8 text-lg font-semibold">Third-party services</h2>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          Font previews in the editor are loaded from Google Fonts. When you
+          export, the server fetches the selected font files from the Google
+          Fonts CDN to embed them in your PDF. These requests expose your IP
+          address to Google, but no CSV data, design content, or generated
+          output is ever sent to Google.
+        </p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          When Upstash credentials are configured, the server keeps an
+          anonymous daily counter of completed exports (a number per day,
+          nothing else). No CSV values, names, design contents, filenames, or
+          identifiers are stored in that counter.
+        </p>
       </article>
     </AppShell>
   );

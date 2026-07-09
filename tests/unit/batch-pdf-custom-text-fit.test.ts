@@ -17,6 +17,7 @@ function makeStyle(overrides: Partial<TextBoxStyle> = {}): TextBoxStyle {
 const LARGE_BOX: TextFitBox = { widthPt: 500, heightPt: 200 };
 // A box too small to fit anything meaningful
 const TINY_BOX: TextFitBox = { widthPt: 10, heightPt: 10 };
+const NARROW_TALL_BOX: TextFitBox = { widthPt: 10, heightPt: 40 };
 // A medium box (roughly 4in x 0.5in at 72pt/in)
 const MEDIUM_BOX: TextFitBox = { widthPt: 288, heightPt: 36 };
 
@@ -221,7 +222,7 @@ describe("resolveTextFit - truncate", () => {
 
   it("long text is truncated with ellipsis and does not block export", () => {
     const text = "This is a very long string that will absolutely not fit in a small box";
-    const result = resolveTextFit({ text, box: TINY_BOX, style: TRUNCATE_STYLE });
+    const result = resolveTextFit({ text, box: NARROW_TALL_BOX, style: TRUNCATE_STYLE });
     expect(result.status).toBe("fitsWithTruncation");
     expect(result.blocksExport).toBe(false);
     expect(result.warningCode).toBe("text_truncated");
@@ -237,12 +238,22 @@ describe("resolveTextFit - truncate", () => {
 
   it("result never includes raw warning codes with text content", () => {
     const text = "sensitive:data:here";
-    const result = resolveTextFit({ text, box: TINY_BOX, style: TRUNCATE_STYLE });
-    // warningCode should be a fixed code string, not derived from text
+    const result = resolveTextFit({ text, box: NARROW_TALL_BOX, style: TRUNCATE_STYLE });
     if (result.warningCode) {
       expect(result.warningCode).toBe("text_truncated");
       expect(result.warningCode).not.toContain(text);
     }
+  });
+
+  it("warns without blocking when text is taller than a truncate box", () => {
+    const result = resolveTextFit({
+      text: "Tall",
+      box: { widthPt: 500, heightPt: 8 },
+      style: makeStyle({ overflowMode: "truncate", fontSize: 24, lineHeight: 1.2 }),
+    });
+    expect(result.status).toBe("fitsWithTruncation");
+    expect(result.blocksExport).toBe(false);
+    expect(result.warningCode).toBe("text_taller_than_box");
   });
 });
 

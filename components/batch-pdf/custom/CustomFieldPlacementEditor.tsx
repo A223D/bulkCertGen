@@ -10,6 +10,7 @@ import {
   addFieldBox,
   createDefaultCsvFieldBox,
   createDefaultStaticTextBox,
+  duplicateFieldBox,
   getFieldBoxById,
   isCustomFieldPlacementReady,
   removeFieldBox,
@@ -30,6 +31,7 @@ type CustomFieldPlacementEditorProps = {
   csvHeaders: string[];
   boxes: CustomFieldBox[];
   selectedBoxId: string | null;
+  itemWidthPt?: number;
   onBoxesChange: (boxes: CustomFieldBox[]) => void;
   onSelectedBoxChange: (boxId: string | null) => void;
 };
@@ -41,6 +43,7 @@ export function CustomFieldPlacementEditor({
   csvHeaders,
   boxes,
   selectedBoxId,
+  itemWidthPt,
   onBoxesChange,
   onSelectedBoxChange,
 }: CustomFieldPlacementEditorProps) {
@@ -151,6 +154,19 @@ export function CustomFieldPlacementEditor({
     onSelectedBoxChange(nextBoxes[0]?.id ?? null);
   }
 
+  function handleDuplicateBox(boxId: string) {
+    const result = duplicateFieldBox({ boxes, boxId, csvHeaders });
+
+    if (!result.ok) {
+      setActionErrors(result.errors);
+      return;
+    }
+
+    setActionErrors([]);
+    onBoxesChange(result.value);
+    onSelectedBoxChange(result.value[result.value.length - 1]?.id ?? null);
+  }
+
   return (
     <section
       className="min-w-0"
@@ -163,6 +179,11 @@ export function CustomFieldPlacementEditor({
       {asset ? (
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0">
+            {boxes.length === 0 ? (
+              <div className="mb-3 rounded-xl border border-warning-line bg-warning-soft px-4 py-3 text-sm leading-6 text-warning">
+                Pick a spreadsheet column, click Add this field, then drag the new box onto a blank space in the design.
+              </div>
+            ) : null}
             <CustomDesignStage
               file={file}
               asset={asset}
@@ -172,6 +193,7 @@ export function CustomFieldPlacementEditor({
               onSelectBox={onSelectedBoxChange}
               onUpdateBoxRect={handleUpdateBoxRect}
               onDeleteBox={handleDeleteBox}
+              itemWidthPt={itemWidthPt}
             />
           </div>
 
@@ -197,7 +219,7 @@ export function CustomFieldPlacementEditor({
                 fullWidth
                 onClick={handleAddCsvField}
                 disabled={!hasCsvHeaders || !safeSelectedColumn}
-                className="mt-3"
+                className={boxes.length === 0 ? "mt-3 shadow-[0_0_0_4px_rgba(242,176,30,0.18)]" : "mt-3"}
               >
                 <Plus className="h-4 w-4" /> Add this field
               </Button>
@@ -248,6 +270,7 @@ export function CustomFieldPlacementEditor({
               csvHeaders={csvHeaders}
               onUpdate={handleUpdateBox}
               onDelete={handleDeleteBox}
+              onDuplicate={handleDuplicateBox}
             />
 
             {summaryErrors.length > 0 ? (

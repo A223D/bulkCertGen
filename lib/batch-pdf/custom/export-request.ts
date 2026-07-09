@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { BATCH_PDF_LIMITS } from "../limits.ts";
 import { normalizePrintableText } from "../text-normalization.ts";
 import type { CsvRow, Result } from "../types.ts";
@@ -23,40 +24,79 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// Zod schemas for the high-risk parts of the payload (rows + headers).
+// Deeper structural validators (design asset, field boxes, export options)
+// remain as-is downstream.
+const csvRowSchema = z
+  .record(z.string(), z.string().max(BATCH_PDF_LIMITS.maxFieldLength))
+  .superRefine((row, ctx) => {
+    for (const [key, value] of Object.entries(row)) {
+      if (key.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Row keys must be non-empty.",
+          path: [key],
+        });
+      }
+      if (typeof value !== "string") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.invalid_type,
+          expected: "string",
+          received: typeof value,
+          path: [key],
+        });
+      }
+    }
+  });
+
+const rowsSchema = z.array(csvRowSchema).max(BATCH_PDF_LIMITS.maxRowsParsed);
+
+const csvHeadersSchema = z
+  .array(z.string().trim().min(1).max(200))
+  .max(BATCH_PDF_LIMITS.maxColumns)
+  .refine(
+    (headers) => new Set(headers).size === headers.length,
+    { message: "CSV headers must be unique." },
+  );
+
 function normalizeHeaders(headers: unknown[]): Result<string[]> {
-  const normalized: string[] = [];
-  for (const header of headers) {
-    if (typeof header !== "string") {
-      return safeError("custom_export_invalid_payload", "Export request has invalid CSV headers.");
-    }
-    const value = normalizePrintableText(header);
-    if (!value) {
-      return safeError("custom_export_invalid_payload", "Export request has invalid CSV headers.");
-    }
-    normalized.push(value);
+  const parsed = csvHeadersSchema.safeParse(headers);
+  if (!parsed.success) {
+    return safeError("custom_export_invalid_payload", "Export request has invalid CSV headers.");
+  }
+
+  const normalized = parsed.data.map((header) => normalizePrintableText(header)).filter(Boolean);
+  if (normalized.length === 0 || new Set(normalized).size !== normalized.length) {
+    return safeError("custom_export_invalid_payload", "Export request has invalid CSV headers.");
   }
 
   return { ok: true, value: normalized };
 }
 
 function normalizeRows(rows: unknown[], csvHeaders: string[]): Result<CsvRow[]> {
-  const normalizedRows: CsvRow[] = [];
+  const parsed = rowsSchema.safeParse(rows);
+  if (!parsed.success) {
+    const tooLong = parsed.error.issues.some(
+      (issue) => issue.code === "too_big" || issue.message.includes("max"),
+    );
+    if (tooLong) {
+      return safeError(
+        "custom_export_field_too_long",
+        `A CSV value is too long. Keep values under ${BATCH_PDF_LIMITS.maxFieldLength} characters.`,
+      );
+    }
+    return safeError("custom_export_invalid_payload", "Export request has invalid row data.");
+  }
 
-  for (const rowValue of rows) {
+  const normalizedRows: CsvRow[] = [];
+  for (const rowValue of parsed.data) {
     if (!isPlainObject(rowValue)) {
       return safeError("custom_export_invalid_payload", "Export request has invalid row data.");
     }
 
     const row: CsvRow = {};
     for (const header of csvHeaders) {
-      const value = normalizePrintableText(rowValue[header]);
-      if (value.length > BATCH_PDF_LIMITS.maxFieldLength) {
-        return safeError(
-          "custom_export_field_too_long",
-          `A CSV value is too long. Keep values under ${BATCH_PDF_LIMITS.maxFieldLength} characters.`,
-        );
-      }
-      row[header] = value;
+      row[header] = normalizePrintableText(rowValue[header]);
     }
     normalizedRows.push(row);
   }
@@ -182,7 +222,7 @@ export function validateCustomExportPayload(
     if (!hasValidSize) {
       return safeError(
         "custom_export_needs_item_size",
-        "Image designs require a physical item size. Set the width and height in the preflight panel.",
+        "Image designs require a physical item size. Set the width and height on the Preview step.",
       );
     }
   }

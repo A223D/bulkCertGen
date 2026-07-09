@@ -290,15 +290,25 @@ function resolveTruncate(
   const truncated = truncateTextToFit({ text: rawText, boxWidthPt: box.widthPt, style });
   const wasTruncated = truncated !== normalizedText;
 
+  const lineHeight = estimateLineHeightPt({ fontSize: style.fontSize, lineHeight: style.lineHeight });
+  const tallerThanBox = lineHeight > box.heightPt;
+
+  let warningCode: string | undefined;
+  if (tallerThanBox) {
+    warningCode = "text_taller_than_box";
+  } else if (wasTruncated) {
+    warningCode = "text_truncated";
+  }
+
   return {
-    status: wasTruncated ? "fitsWithTruncation" : "fits",
+    status: wasTruncated || tallerThanBox ? "fitsWithTruncation" : "fits",
     originalTextLength,
     renderedText: truncated,
     fontSize: style.fontSize,
     lineCount: 1,
     overflowMode: "truncate",
     blocksExport: false,
-    warningCode: wasTruncated ? "text_truncated" : undefined,
+    warningCode,
   };
 }
 

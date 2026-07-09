@@ -85,6 +85,20 @@ export function parseCsvText(text: string): Result<CsvParseResult> {
     );
   }
 
+  // Title-row detection: if row 1 has only one non-empty cell (a title) and
+  // the next row has more cells, the user likely has a title line above the
+  // real headers.
+  const nonEmptyHeaderCount = headers.filter((h) => h !== "").length;
+  const nextRow = rawRows[1] ?? [];
+  const nextRowCellCount = nextRow.filter((c) => normalizeCellValue(c) !== "").length;
+
+  if (nonEmptyHeaderCount <= 1 && nextRowCellCount > 1) {
+    return csvError(
+      "csv_title_row",
+      "Row 1 looks like a title, not column headers. Delete the title row so the first row contains your column names (like name, course, date).",
+    );
+  }
+
   if (headers.some((header) => header === "")) {
     return csvError("csv_blank_header", "Every CSV column needs a header.");
   }
@@ -130,10 +144,14 @@ export function parseCsvText(text: string): Result<CsvParseResult> {
     const rawRow = dataRows[rowIndex] ?? [];
 
     if (rawRow.length > headers.length) {
-      return csvError(
-        "csv_row_too_wide",
-        "A CSV row has more cells than the header row.",
-      );
+      const trailingCells = rawRow.slice(headers.length);
+      const allTrailingEmpty = trailingCells.every((c) => normalizeCellValue(c) === "");
+      if (!allTrailingEmpty) {
+        return csvError(
+          "csv_row_too_wide",
+          `Row ${rowIndex + 2} has more cells than the header row. Make sure every row has the same number of columns as the headers.`,
+        );
+      }
     }
 
     const row: CsvRow = {};

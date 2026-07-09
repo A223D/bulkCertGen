@@ -79,6 +79,41 @@ describe("createPreflightReportCsv", () => {
     expect(row).toContain('"Line one\nLine two"');
   });
 
+  it("guards formula prefixes in report cells", () => {
+    const csv = createPreflightReportCsv({
+      result: makeResult([
+        {
+          code: "text_truncated",
+          severity: "warning",
+          rowIndex: 0,
+          fieldLabel: '=HYPERLINK("https://example.test","click")',
+          sourceColumn: "-5 days",
+          message: "@SUM(A1:A2)",
+        },
+      ]),
+    });
+
+    expect(csv).toContain("'=HYPERLINK");
+    expect(csv).toContain("'-5 days");
+    expect(csv).toContain("'@SUM");
+  });
+
+  it("guards plus-prefixed report cells", () => {
+    const csv = createPreflightReportCsv({
+      result: makeResult([
+        {
+          code: "text_overflow",
+          severity: "error",
+          rowIndex: 0,
+          fieldLabel: "+cmd",
+          message: "Overflow",
+        },
+      ]),
+    });
+
+    expect(csv).toContain("'+cmd");
+  });
+
   it("handles an empty issue list with a single safe summary row", () => {
     const csv = createPreflightReportCsv({ result: makeResult([]) });
     const lines = csv.split("\r\n");

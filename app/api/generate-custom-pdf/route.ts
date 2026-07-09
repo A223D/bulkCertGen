@@ -50,8 +50,60 @@ const SAFE_ERROR =
 const SAFE_RENDER_ERROR =
   "We could not generate your download. Check the highlighted issues and try again.";
 
-function jsonError(message: string, status = 400): Response {
-  return Response.json({ error: message }, { status });
+type FailureTelemetry = {
+  startedAt: number;
+  code: string;
+  status: number;
+  layoutMode?: string;
+  outputMode?: string;
+  rowCount?: number;
+  fileType?: string;
+  fileSizeBucket?: string;
+};
+
+function fileSizeBucket(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "unknown";
+  if (bytes < 1024 * 1024) return "0-1mb";
+  if (bytes < 5 * 1024 * 1024) return "1-5mb";
+  if (bytes < 10 * 1024 * 1024) return "5-10mb";
+  return "10mb+";
+}
+
+function makeErrorId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
+  }
+
+  return Math.random().toString(16).slice(2, 10).toUpperCase().padEnd(8, "0");
+}
+
+function logFailure(telemetry: FailureTelemetry): string {
+  const errorId = makeErrorId();
+  console.error(
+    JSON.stringify({
+      evt: "custom_export_failed",
+      errorId,
+      code: telemetry.code,
+      status: telemetry.status,
+      layoutMode: telemetry.layoutMode,
+      outputMode: telemetry.outputMode,
+      rowCount: telemetry.rowCount,
+      fileType: telemetry.fileType,
+      fileSizeBucket: telemetry.fileSizeBucket,
+      durationMs: Date.now() - telemetry.startedAt,
+    }),
+  );
+  return errorId;
+}
+
+function jsonError(message: string, status = 400, telemetry?: FailureTelemetry): Response {
+  const errorId = telemetry ? logFailure(telemetry) : null;
+  return Response.json({ error: errorId ? `${message} (ref ${errorId})` : message }, { status });
+}
+
+function completedResponse(response: Response): Response {
+  trackFlowCompleted().catch(() => {});
+  return response;
 }
 
 function preflightBlockedMessage(preflight: CustomDesignPreflightResult): string {
@@ -95,7 +147,7 @@ function renderErrorMessage(error: unknown): string {
 
 async function ensureExportFontsAvailable(
   fieldBoxes: Parameters<typeof renderCustomDesignCombinedPdf>[0]["fieldBoxes"],
-): Promise<Response | null> {
+): Promise<string | null> {
   const seen = new Set<string>();
 
   for (const box of fieldBoxes) {
@@ -105,9 +157,7 @@ async function ensureExportFontsAvailable(
 
     const source = await resolveFontSource(box.style.fontFamily, box.style.fontWeight);
     if (source.kind === "unavailable") {
-      return jsonError(
-        `The font "${box.style.fontFamily}" could not be loaded for export. Try again or choose a different font.`,
-      );
+      return `The font "${box.style.fontFamily}" could not be loaded for export. Try again or choose a different font.`;
     }
   }
 
@@ -115,23 +165,32 @@ async function ensureExportFontsAvailable(
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const startedAt = Date.now();
+  const telemetry: Omit<FailureTelemetry, "code" | "status"> = { startedAt };
+  const fail = (code: string, message = SAFE_ERROR, status = 400) =>
+    jsonError(message, status, {
+      ...telemetry,
+      code,
+      status,
+    });
   let formData: FormData;
 
   try {
     formData = await request.formData();
   } catch {
-    return jsonError(SAFE_ERROR);
+    return fail("form_data_invalid");
   }
 
   const designFile = formData.get("designFile");
   const payloadRaw = formData.get("payload");
 
   if (!(designFile instanceof File)) {
-    return jsonError(SAFE_ERROR);
+    return fail("design_file_missing");
   }
+  telemetry.fileSizeBucket = fileSizeBucket(designFile.size);
 
   if (typeof payloadRaw !== "string") {
-    return jsonError(SAFE_ERROR);
+    return fail("payload_missing");
   }
 
   // Validate file metadata before reading bytes.
@@ -142,8 +201,12 @@ export async function POST(request: Request): Promise<Response> {
   });
 
   if (!fileMetaResult.ok) {
-    return jsonError(fileMetaResult.errors[0]?.message ?? SAFE_ERROR);
+    return fail(
+      fileMetaResult.errors[0]?.code ?? "design_file_invalid",
+      fileMetaResult.errors[0]?.message ?? SAFE_ERROR,
+    );
   }
+  telemetry.fileType = fileMetaResult.value.kind;
 
   // Parse and validate payload shape.
   let parsed: unknown;
@@ -151,22 +214,31 @@ export async function POST(request: Request): Promise<Response> {
   try {
     parsed = JSON.parse(payloadRaw);
   } catch {
-    return jsonError(SAFE_ERROR);
+    return fail("payload_json_invalid");
   }
 
   const parseResult = parseCustomExportPayload(parsed);
 
   if (!parseResult.ok) {
-    return jsonError(parseResult.errors[0]?.message ?? SAFE_ERROR);
+    return fail(
+      parseResult.errors[0]?.code ?? "payload_parse_invalid",
+      parseResult.errors[0]?.message ?? SAFE_ERROR,
+    );
   }
 
   const validationResult = validateCustomExportPayload(parseResult.value);
 
   if (!validationResult.ok) {
-    return jsonError(validationResult.errors[0]?.message ?? SAFE_ERROR);
+    return fail(
+      validationResult.errors[0]?.code ?? "payload_validation_invalid",
+      validationResult.errors[0]?.message ?? SAFE_ERROR,
+    );
   }
 
   const payload = validationResult.value;
+  telemetry.layoutMode = payload.exportOptions.layoutMode;
+  telemetry.outputMode = resolveOutputMode(payload.exportOptions);
+  telemetry.rowCount = getRowsForFreeCustomExport(payload.rows).length;
 
   // Read design file bytes only after all shape/metadata checks pass.
   let designBytes: Uint8Array;
@@ -178,7 +250,7 @@ export async function POST(request: Request): Promise<Response> {
     // reused for every row. PNGs remain lossless.
     designBytes = normalizeDesignImageBytes(new Uint8Array(buffer));
   } catch {
-    return jsonError(SAFE_ERROR);
+    return fail("design_file_read_failed");
   }
 
   const cappedRows = getRowsForFreeCustomExport(payload.rows);
@@ -193,21 +265,19 @@ export async function POST(request: Request): Promise<Response> {
   });
 
   if (!preflightResult.ok) {
-    return jsonError(SAFE_ERROR);
+    return fail(preflightResult.errors[0]?.code ?? "preflight_invalid");
   }
 
   const preflight = preflightResult.value;
 
   if (preflight.status === "blocked" || preflight.status === "needsOutputSize") {
-    return jsonError(preflightBlockedMessage(preflight));
+    return fail(`preflight_${preflight.status}`, preflightBlockedMessage(preflight));
   }
 
   const fontError = await ensureExportFontsAvailable(payload.fieldBoxes);
-  if (fontError) return fontError;
+  if (fontError) return fail("font_unavailable", fontError);
 
-  trackFlowCompleted().catch(() => {});
-
-  const outputMode = resolveOutputMode(payload.exportOptions);
+  const outputMode = telemetry.outputMode;
   const includeReport = payload.exportOptions.includeOverflowReport;
 
   // Optional baseline-JPEG background: re-encode the image once so pdf-lib
@@ -243,13 +313,15 @@ export async function POST(request: Request): Promise<Response> {
       });
 
       if (!includeReport) {
-        return new Response(Buffer.from(combinedBytes), {
-          headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition":
-              'attachment; filename="batch-pdf-custom-export.pdf"',
-          },
-        });
+        return completedResponse(
+          new Response(Buffer.from(combinedBytes), {
+            headers: {
+              "Content-Type": "application/pdf",
+              "Content-Disposition":
+                'attachment; filename="batch-pdf-custom-export.pdf"',
+            },
+          }),
+        );
       }
 
       const csv = createPreflightReportCsv({ result: preflight });
@@ -261,13 +333,15 @@ export async function POST(request: Request): Promise<Response> {
         },
       ]);
 
-      return new Response(Buffer.from(zipBytes), {
-        headers: {
-          "Content-Type": "application/zip",
-          "Content-Disposition":
-            'attachment; filename="batch-pdf-custom-export.zip"',
-        },
-      });
+      return completedResponse(
+        new Response(Buffer.from(zipBytes), {
+          headers: {
+            "Content-Type": "application/zip",
+            "Content-Disposition":
+              'attachment; filename="batch-pdf-custom-export.zip"',
+          },
+        }),
+      );
     }
 
     // Separate files with a single row and no report is just one PDF — skip the
@@ -290,12 +364,14 @@ export async function POST(request: Request): Promise<Response> {
         exportOptions: payload.exportOptions,
       });
 
-      return new Response(Buffer.from(bytes), {
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="${filename}"`,
-        },
-      });
+      return completedResponse(
+        new Response(Buffer.from(bytes), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+          },
+        }),
+      );
     }
 
     // Separate files: embed the background once into a base document and clone
@@ -350,6 +426,8 @@ export async function POST(request: Request): Promise<Response> {
           const csv = createPreflightReportCsv({ result: preflight });
           append(PREFLIGHT_REPORT_FILENAME, new TextEncoder().encode(csv));
         }
+
+        trackFlowCompleted().catch(() => {});
       });
 
       return new Response(zipStream, {
@@ -372,13 +450,15 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     if (!includeReport) {
-      return new Response(Buffer.from(sheetBytes), {
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition":
-            'attachment; filename="custom-print-sheets.pdf"',
-        },
-      });
+      return completedResponse(
+        new Response(Buffer.from(sheetBytes), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition":
+              'attachment; filename="custom-print-sheets.pdf"',
+          },
+        }),
+      );
     }
 
     const csv = createPreflightReportCsv({ result: preflight });
@@ -390,14 +470,20 @@ export async function POST(request: Request): Promise<Response> {
       },
     ]);
 
-    return new Response(Buffer.from(zipBytes), {
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition":
-          'attachment; filename="batch-pdf-custom-export.zip"',
-      },
-    });
+    return completedResponse(
+      new Response(Buffer.from(zipBytes), {
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition":
+            'attachment; filename="batch-pdf-custom-export.zip"',
+        },
+      }),
+    );
   } catch (error) {
-    return jsonError(renderErrorMessage(error), isCustomRenderError(error) ? 400 : 500);
+    return fail(
+      isCustomRenderError(error) ? error.code : "render_failed",
+      renderErrorMessage(error),
+      isCustomRenderError(error) ? 400 : 500,
+    );
   }
 }

@@ -10,6 +10,7 @@ export type DisplayIssue = {
 type Props = {
   items: DisplayIssue[];
   hiddenCount: number;
+  onJumpToRow?: (rowIndex: number) => void;
 };
 
 const SEVERITY_LABEL: Record<PreflightIssue["severity"], string> = {
@@ -60,6 +61,8 @@ function explain(issue: PreflightIssue, sampleText?: string): string {
       return `${quote(sampleText)} is too long to fit in this field.`;
     case "text_truncated":
       return `${quote(sampleText)} is too long, so it will be cut off with “…”.`;
+    case "text_taller_than_box":
+      return `${quote(sampleText)} is taller than this field box.`;
     case "text_shrunk":
       return `${quote(sampleText)} will be made smaller so it fits.`;
     case "text_wrapped":
@@ -82,6 +85,8 @@ function fix(issue: PreflightIssue): string {
       return "Try: make the box bigger by dragging a corner, tap “↓ Smaller” to lower the text size, or set this field to “Shrink to fit” under More text settings.";
     case "text_truncated":
       return "Okay if you meant to shorten it. To show all of it, make the box bigger or shorten the text in your spreadsheet.";
+    case "text_taller_than_box":
+      return "Lower the text size or make the box taller.";
     case "text_shrunk":
       return "Happens automatically. Make the box bigger if you want the text to stay larger.";
     case "text_wrapped":
@@ -112,7 +117,7 @@ function title(issue: PreflightIssue): string {
   return field;
 }
 
-export function PreflightIssueList({ items, hiddenCount }: Props) {
+export function PreflightIssueList({ items, hiddenCount, onJumpToRow }: Props) {
   const sorted = [...items].sort(
     (a, b) => SEVERITY_ORDER[a.issue.severity] - SEVERITY_ORDER[b.issue.severity],
   );
@@ -138,6 +143,15 @@ export function PreflightIssueList({ items, hiddenCount }: Props) {
             </div>
             <p className="mt-1.5 leading-5 text-ink">{explain(issue, sampleText)}</p>
             <p className="mt-1 text-xs leading-5 text-ink-soft">{fix(issue)}</p>
+            {typeof issue.rowIndex === "number" && onJumpToRow ? (
+              <button
+                type="button"
+                onClick={() => onJumpToRow(issue.rowIndex as number)}
+                className="mt-2 rounded-md border border-line bg-panel px-2 py-1 text-xs font-semibold text-ink hover:border-accent"
+              >
+                Show row {issue.rowIndex + 1}
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>

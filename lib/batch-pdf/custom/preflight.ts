@@ -1,5 +1,5 @@
 import type { Result, CsvRow } from "../types.ts";
-import { measurementToPoints } from "./export-options.ts";
+import { measurementToPoints, measurementToInches } from "./export-options.ts";
 import { normalizedRectToPoints } from "./coordinates.ts";
 import { validateCustomFieldBoxes } from "./field-boxes.ts";
 import {
@@ -8,6 +8,7 @@ import {
 } from "./fonts/font-coverage.ts";
 import { resolveTextFit, type TextFitBox } from "./text-fit.ts";
 import { normalizePrintableText } from "../text-normalization.ts";
+import { CUSTOM_DESIGN_LIMITS } from "../limits.ts";
 import type { CustomFieldBox, DesignAsset, ExportOptions } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,7 @@ export type PreflightIssueCode =
   | "text_overflow"
   | "text_shrunk"
   | "text_wrapped"
+  | "text_taller_than_box"
   | "unsupported_characters"
   | "invalid_field_box"
   | "needs_output_size";
@@ -75,18 +77,27 @@ export function resolveDesignItemSizeForPreflight(args: {
   if (
     exportOptions?.itemSizeMode === "custom" &&
     typeof exportOptions.customItemWidth === "number" &&
-    typeof exportOptions.customItemHeight === "number" &&
-    exportOptions.customItemWidth > 0 &&
-    exportOptions.customItemHeight > 0
+    typeof exportOptions.customItemHeight === "number"
   ) {
-    return {
-      ok: true,
-      value: {
-        widthPt: measurementToPoints(exportOptions.customItemWidth, exportOptions.unit),
-        heightPt: measurementToPoints(exportOptions.customItemHeight, exportOptions.unit),
-        source: "customItemSize",
-      },
-    };
+    const widthIn = measurementToInches(exportOptions.customItemWidth, exportOptions.unit);
+    const heightIn = measurementToInches(exportOptions.customItemHeight, exportOptions.unit);
+
+    const inBounds =
+      widthIn >= CUSTOM_DESIGN_LIMITS.minCustomPageSizeInches &&
+      widthIn <= CUSTOM_DESIGN_LIMITS.maxCustomPageSizeInches &&
+      heightIn >= CUSTOM_DESIGN_LIMITS.minCustomPageSizeInches &&
+      heightIn <= CUSTOM_DESIGN_LIMITS.maxCustomPageSizeInches;
+
+    if (exportOptions.customItemWidth > 0 && exportOptions.customItemHeight > 0 && inBounds) {
+      return {
+        ok: true,
+        value: {
+          widthPt: measurementToPoints(exportOptions.customItemWidth, exportOptions.unit),
+          heightPt: measurementToPoints(exportOptions.customItemHeight, exportOptions.unit),
+          source: "customItemSize",
+        },
+      };
+    }
   }
 
   // No custom size yet: need physical output dimensions.
@@ -183,7 +194,7 @@ export function runCustomDesignPreflight(args: {
             code: "needs_output_size",
             severity: "warning",
             message:
-              "Set a custom item size in export options so text fit can be checked for this image design.",
+              "Choose a finished size in the 'Finished size' section above so text fit can be checked for this image design.",
           },
         ],
       },
@@ -293,6 +304,19 @@ export function runCustomDesignPreflight(args: {
           sourceColumn,
           valueLength,
           message: `Row ${rowIndex + 1}: text in "${box.label}" will be cut short with an ellipsis (${valueLength} characters).`,
+        });
+      } else if (fitResult.warningCode === "text_taller_than_box") {
+        warningCount++;
+        fitCount++;
+        pushIssue(issues, {
+          code: "text_taller_than_box",
+          severity: "warning",
+          rowIndex,
+          fieldBoxId: box.id,
+          fieldLabel: box.label,
+          sourceColumn,
+          valueLength,
+          message: `Row ${rowIndex + 1}: text in "${box.label}" is taller than its box at ${box.style.fontSize} pt. Lower the font size or enlarge the box.`,
         });
       } else if (fitResult.warningCode === "text_shrunk") {
         warningCount++;

@@ -8,6 +8,7 @@ import { CUSTOM_DESIGN_LIMITS } from "@/lib/batch-pdf/limits";
 import {
   normalizedRectToPixelRect,
   nudgeNormalizedRect,
+  resizeNormalizedRect,
 } from "@/lib/batch-pdf/custom/editor-geometry";
 import { clampNormalizedRect } from "@/lib/batch-pdf/custom/coordinates";
 import { cssFontStack } from "@/lib/batch-pdf/custom/fonts/catalog";
@@ -26,6 +27,7 @@ type CustomDesignStageProps = {
   onSelectBox: (boxId: string | null) => void;
   onUpdateBoxRect: (boxId: string, rect: NormalizedRect) => void;
   onDeleteBox?: (boxId: string) => void;
+  itemWidthPt?: number;
 };
 
 type StageSize = {
@@ -121,6 +123,14 @@ function roundNormalized(value: number): number {
   return Number(value.toFixed(12));
 }
 
+function stageFontSizePx(fontSizePt: number, stageWidthPx: number, itemWidthPt?: number): number {
+  if (typeof itemWidthPt === "number" && itemWidthPt > 0 && stageWidthPx > 0) {
+    return Math.max(8, fontSizePt * (stageWidthPx / itemWidthPt));
+  }
+
+  return Math.max(9, Math.min(fontSizePt, 28));
+}
+
 export function CustomDesignStage({
   file,
   asset,
@@ -130,6 +140,7 @@ export function CustomDesignStage({
   onSelectBox,
   onUpdateBoxRect,
   onDeleteBox,
+  itemWidthPt,
 }: CustomDesignStageProps) {
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stageSize, setStageSize] = useState<StageSize>({ width: 0, height: 0 });
@@ -214,18 +225,27 @@ export function CustomDesignStage({
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
     const direction = event.key.replace("Arrow", "").toLowerCase() as
       | "up"
       | "down"
       | "left"
       | "right";
-    const rect = nudgeNormalizedRect({
-      rect: box.rect,
-      direction,
-      amount: event.shiftKey ? 0.02 : 0.005,
-    });
+    const amount = event.shiftKey ? 0.02 : 0.005;
+    event.preventDefault();
+    event.stopPropagation();
+    const rect =
+      event.ctrlKey || event.metaKey
+        ? resizeNormalizedRect({
+            rect: box.rect,
+            handle: "se",
+            deltaX: direction === "left" ? -amount : direction === "right" ? amount : 0,
+            deltaY: direction === "up" ? -amount : direction === "down" ? amount : 0,
+          })
+        : nudgeNormalizedRect({
+            rect: box.rect,
+            direction,
+            amount,
+          });
 
     onUpdateBoxRect(box.id, rect);
   }
@@ -347,7 +367,7 @@ export function CustomDesignStage({
                         textAlign: box.style.align,
                         fontFamily: cssFontStack(box.style.fontFamily),
                         fontWeight: box.style.fontWeight === "bold" ? 700 : 400,
-                        fontSize: `${Math.max(9, Math.min(box.style.fontSize, 28))}px`,
+                        fontSize: `${stageFontSizePx(box.style.fontSize, stageSize.width, itemWidthPt)}px`,
                         lineHeight: box.style.lineHeight,
                       }}
                     >
@@ -371,7 +391,7 @@ export function CustomDesignStage({
       </div>
 
       <p className="text-center text-xs leading-5 text-muted-foreground">
-        Drag a field to move it. Select it, then drag any handle to resize. Arrow keys nudge (hold Shift for a bigger step); press Delete to remove the selected field.
+        Drag a field to move it. Select it, then drag any handle to resize. Arrow keys nudge; Ctrl or Command with arrow keys resizes; hold Shift for a bigger step. Press Delete to remove the selected field.
       </p>
     </div>
   );

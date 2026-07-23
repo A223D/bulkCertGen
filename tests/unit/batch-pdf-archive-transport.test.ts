@@ -124,7 +124,7 @@ function config(overrides: Partial<ArchiveConfig> = {}): ArchiveConfig {
     remoteDir: "/bulkCertGenOutputs",
     retentionDays: 7,
     totalCapBytes: 5 * GB,
-    maxArchiveBytes: 200 * MB,
+    maxArchiveBytes: 100 * MB,
     operationTimeoutMs: ARCHIVE_DEFAULTS.operationTimeoutMs,
     totalTimeoutMs: 500,
     partialMaxAgeMs: ARCHIVE_DEFAULTS.partialMaxAgeMs,

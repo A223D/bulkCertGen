@@ -16,14 +16,25 @@ export const ARCHIVE_DEFAULTS = {
   /** Hard ceiling on everything stored in the remote folder. */
   totalCapBytes: 5 * 1024 * 1024 * 1024,
   /**
-   * Largest single archive we will upload. Bounds /tmp usage on Vercel (512 MB
-   * writable) and stops one pathological batch from evicting a week of files.
+   * Largest single archive we will upload.
+   *
+   * Bounds /tmp usage on Vercel (512 MB writable), stops one pathological batch
+   * from evicting a week of files, and — the binding constraint — keeps the
+   * transfer inside the time budget below. FTP throughput to shared hosting is
+   * typically a few MB/s, so anything much larger would reliably burn the whole
+   * budget and fail. Raise it if measured throughput supports it; the trade-off
+   * is that batches above the ceiling are skipped, and large batches are the
+   * ones most worth being able to investigate.
    */
-  maxArchiveBytes: 200 * 1024 * 1024,
+  maxArchiveBytes: 100 * 1024 * 1024,
   /** Per-FTP-operation socket timeout. */
-  operationTimeoutMs: 30_000,
-  /** Whole-upload budget, including listing and pruning. */
-  totalTimeoutMs: 110_000,
+  operationTimeoutMs: 20_000,
+  /**
+   * Whole-upload budget, including listing and pruning. Deliberately well under
+   * the route's `maxDuration` (60s on Vercel Hobby) so this timeout fires — and
+   * removes the partial upload — before the platform kills the invocation.
+   */
+  totalTimeoutMs: 45_000,
   /** Interrupted uploads leave `.part` files; sweep them after this long. */
   partialMaxAgeMs: 24 * 60 * 60 * 1000,
 } as const;

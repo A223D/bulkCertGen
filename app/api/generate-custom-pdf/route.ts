@@ -40,6 +40,14 @@ import {
 
 export const runtime = "nodejs";
 
+/**
+ * Vercel Hobby caps a function at 60s. That budget covers rendering, the
+ * response, and the `after()` archive upload, so the archive's own timeouts in
+ * `lib/batch-pdf/archive/config.ts` are set to expire well inside it — our
+ * timeout cleans up the abandoned `.part` file, a platform kill does not.
+ */
+export const maxDuration = 60;
+
 async function trackFlowCompleted(): Promise<void> {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;

@@ -15,7 +15,7 @@ function testConfig(overrides: Partial<ArchiveConfig> = {}): ArchiveConfig {
     remoteDir: "/bulkCertGenOutputs",
     retentionDays: 7,
     totalCapBytes: 5 * 1024 ** 3,
-    maxArchiveBytes: 200 * 1024 * 1024,
+    maxArchiveBytes: 100 * 1024 * 1024,
     operationTimeoutMs: ARCHIVE_DEFAULTS.operationTimeoutMs,
     totalTimeoutMs: ARCHIVE_DEFAULTS.totalTimeoutMs,
     partialMaxAgeMs: ARCHIVE_DEFAULTS.partialMaxAgeMs,

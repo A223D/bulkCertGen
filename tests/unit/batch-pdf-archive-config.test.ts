@@ -155,7 +155,7 @@ describe("getArchiveConfig limits", () => {
 
     expect(config?.retentionDays).toBe(7);
     expect(config?.totalCapBytes).toBe(5 * 1024 ** 3);
-    expect(config?.maxArchiveBytes).toBe(200 * 1024 * 1024);
+    expect(config?.maxArchiveBytes).toBe(100 * 1024 * 1024);
     expect(config?.partialMaxAgeMs).toBe(ARCHIVE_DEFAULTS.partialMaxAgeMs);
   });
 
@@ -210,6 +210,6 @@ describe("getArchiveConfig limits", () => {
     expect(config?.retentionDays).toBe(7);
     expect(config?.totalCapBytes).toBe(5 * 1024 ** 3);
     // "1e999" must not become a 1-byte ceiling that skips every upload.
-    expect(config?.maxArchiveBytes).toBe(200 * 1024 * 1024);
+    expect(config?.maxArchiveBytes).toBe(100 * 1024 * 1024);
   });
 });

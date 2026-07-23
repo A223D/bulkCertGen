@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { Readable } from "node:stream";
+import { PassThrough, Readable, type Writable } from "node:stream";
 import { createRequire } from "node:module";
 import type { Archiver } from "archiver";
 
@@ -30,17 +30,51 @@ export type ZipAppend = (filename: string, bytes: Uint8Array) => void;
  * after the first bytes have flushed truncates the archive (the HTTP status is
  * already committed). Callers should validate up front (e.g. preflight) so that
  * render-time failures are rare.
+ *
+ * An optional `tap` receives a second copy of the archive bytes (used to spool
+ * a copy for the output archive). It is a peer pipe destination, so Node
+ * applies backpressure from whichever consumer is slower and neither copy is
+ * buffered without bound. A failing tap is unpiped and never affects the
+ * response.
  */
 export function createPdfZipStream(
   produce: (append: ZipAppend) => Promise<void>,
+  options?: { tap?: Writable },
 ): ReadableStream<Uint8Array> {
   const archive = archiver("zip", { zlib: { level: 6 } });
+  const tap = options?.tap;
 
   const append: ZipAppend = (filename, bytes) => {
     // Buffer.from copies into archiver's pipeline; the source array can now be
     // garbage collected once the caller releases it.
     archive.append(Buffer.from(bytes), { name: filename });
   };
+
+  // With a tap, the response reads from a passthrough rather than the archiver
+  // itself, so both destinations are ordinary pipe targets.
+  let output: Readable = archive;
+
+  if (tap) {
+    const passthrough = new PassThrough();
+    archive.pipe(passthrough);
+    archive.pipe(tap);
+
+    // `pipe()` does not forward source errors to its destinations. Without this
+    // handler an archiver failure would leave the response stream open forever
+    // (the reader never sees end or error) and the process would crash on an
+    // unhandled 'error' event.
+    archive.on("error", (error: Error) => {
+      passthrough.destroy(error);
+      // A truncated archive must never be retained as if it were complete.
+      tap.destroy(error);
+    });
+
+    // Losing the tap (disk full, size ceiling hit) must not disturb the
+    // response, and a cancelled response must not leave the tap half-written.
+    tap.on("error", () => archive.unpipe(tap));
+    passthrough.on("error", () => archive.unpipe(passthrough));
+    output = passthrough;
+  }
 
   void (async () => {
     try {
@@ -51,7 +85,7 @@ export function createPdfZipStream(
     }
   })();
 
-  return Readable.toWeb(archive) as unknown as ReadableStream<Uint8Array>;
+  return Readable.toWeb(output) as unknown as ReadableStream<Uint8Array>;
 }
 
 export async function createPdfZip(

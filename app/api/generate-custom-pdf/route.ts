@@ -24,6 +24,11 @@ import {
   PREFLIGHT_REPORT_FILENAME,
 } from "@/lib/batch-pdf/custom/export-report";
 import { createPdfZip, createPdfZipStream } from "@/lib/batch-pdf/zip";
+import {
+  beginStreamedArchive,
+  scheduleBufferedArchive,
+  scheduleSpooledArchive,
+} from "@/lib/batch-pdf/archive/capture";
 import { mapWithConcurrency } from "@/lib/batch-pdf/concurrency";
 import { getCustomExportConcurrency } from "@/lib/batch-pdf/limits";
 import {
@@ -101,7 +106,15 @@ function jsonError(message: string, status = 400, telemetry?: FailureTelemetry):
   return Response.json({ error: errorId ? `${message} (ref ${errorId})` : message }, { status });
 }
 
-function completedResponse(response: Response): Response {
+/**
+ * Marks an export as completed and queues the retained copy of its output.
+ * Both side effects are fire-and-forget: neither can fail the download.
+ */
+function completedResponse(
+  response: Response,
+  archive: { bytes: Uint8Array; innerFilename: string; alreadyZip: boolean },
+): Response {
+  scheduleBufferedArchive(archive);
   trackFlowCompleted().catch(() => {});
   return response;
 }
@@ -321,6 +334,11 @@ export async function POST(request: Request): Promise<Response> {
                 'attachment; filename="batch-pdf-custom-export.pdf"',
             },
           }),
+          {
+            bytes: combinedBytes,
+            innerFilename: "batch-pdf-custom-export.pdf",
+            alreadyZip: false,
+          },
         );
       }
 
@@ -341,6 +359,11 @@ export async function POST(request: Request): Promise<Response> {
               'attachment; filename="batch-pdf-custom-export.zip"',
           },
         }),
+        {
+          bytes: zipBytes,
+          innerFilename: "batch-pdf-custom-export.zip",
+          alreadyZip: true,
+        },
       );
     }
 
@@ -371,6 +394,7 @@ export async function POST(request: Request): Promise<Response> {
             "Content-Disposition": `attachment; filename="${filename}"`,
           },
         }),
+        { bytes, innerFilename: filename, alreadyZip: false },
       );
     }
 
@@ -380,6 +404,10 @@ export async function POST(request: Request): Promise<Response> {
     if (payload.exportOptions.layoutMode === "onePerPage") {
       const useWorkers =
         workersEnabled() && cappedRows.length >= WORKER_ROW_THRESHOLD;
+
+      // This ZIP is never held in memory, so the retained copy is spooled to a
+      // temp file as the response streams and uploaded once it completes.
+      const streamedArchive = beginStreamedArchive();
 
       const zipStream = createPdfZipStream(async (append) => {
         const appendRow = (index: number, bytes: Uint8Array) =>
@@ -428,7 +456,11 @@ export async function POST(request: Request): Promise<Response> {
         }
 
         trackFlowCompleted().catch(() => {});
-      });
+      }, { tap: streamedArchive?.spool.writable });
+
+      if (streamedArchive) {
+        scheduleSpooledArchive(streamedArchive.config, streamedArchive.spool);
+      }
 
       return new Response(zipStream, {
         headers: {
@@ -458,6 +490,11 @@ export async function POST(request: Request): Promise<Response> {
               'attachment; filename="custom-print-sheets.pdf"',
           },
         }),
+        {
+          bytes: sheetBytes,
+          innerFilename: "custom-print-sheets.pdf",
+          alreadyZip: false,
+        },
       );
     }
 
@@ -478,6 +515,11 @@ export async function POST(request: Request): Promise<Response> {
             'attachment; filename="batch-pdf-custom-export.zip"',
         },
       }),
+      {
+        bytes: zipBytes,
+        innerFilename: "batch-pdf-custom-export.zip",
+        alreadyZip: true,
+      },
     );
   } catch (error) {
     return fail(

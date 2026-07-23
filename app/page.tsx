@@ -222,7 +222,7 @@ export const homepageFaqs: Faq[] = [
   {
     question: "Do you store my files?",
     answer:
-      "Your CSV and design are used only for the current batch. We do not store uploaded spreadsheets, uploaded designs, or generated PDF files.",
+      "Your uploaded spreadsheet and design file are used only for the current batch and are never stored. A copy of the finished PDF or ZIP is kept on our private server for 7 days so we can investigate misuse of this free tool, then deleted automatically. See the privacy page for details.",
   },
   {
     question: "Can I generate certificates, name badges, and labels?",
@@ -969,8 +969,10 @@ function PrivacyBand() {
               Your files are used only for your batch.
             </h2>
             <p className="mt-2 max-w-[680px] text-[16px] leading-[1.55] text-[#57534a]">
-              Your CSV and design are used only for the current batch. We do not store
-              uploaded spreadsheets, uploaded designs, or generated PDF files.
+              Your CSV and design are used only for the current batch, and we never
+              store them. To keep this free tool from being misused, a copy of the
+              finished PDF or ZIP is held on our private server for 7 days, then
+              deleted automatically.
             </p>
           </div>
         </div>
@@ -1273,7 +1275,7 @@ export default function HomePage() {
               </div>
               <p className="mt-6 font-mono text-[13.5px] text-[#7a756a]">
                 Up to {BATCH_PDF_LIMITS.freeExportRows} PDFs per batch · no account to start ·
-                files not stored
+                uploads not stored
               </p>
             </div>
           </div>

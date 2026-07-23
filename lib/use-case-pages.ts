@@ -161,7 +161,7 @@ export const useCasePages: UseCasePage[] = [
       {
         question: "Does Batch, Please store member data?",
         answer:
-          "No. Uploaded spreadsheets, designs, and generated PDFs are not stored as projects.",
+          "Uploaded spreadsheets and designs are never stored. A copy of the generated PDF or ZIP is kept privately for 7 days so misuse of this free tool can be investigated, then deleted automatically.",
       },
       {
         question: "Can I add photos to each ID card?",

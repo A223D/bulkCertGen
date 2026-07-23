@@ -69,4 +69,16 @@ describe("streaming PDF ZIP utility", () => {
     const zip = await JSZip.loadAsync(await streamToBytes(stream));
     expect(Object.keys(zip.files).sort()).toEqual(["1.pdf", "2.pdf", "3.pdf"]);
   });
+
+  it("surfaces a producer failure to the reader instead of hanging", async () => {
+    // The response status is already committed by this point, so the reader
+    // seeing an error is what truncates the download. Never resolving would
+    // leave the request open until the platform times it out.
+    const stream = createPdfZipStream(async (append) => {
+      append("1.pdf", new Uint8Array([1]));
+      throw new Error("render exploded");
+    });
+
+    await expect(streamToBytes(stream)).rejects.toThrow();
+  });
 });

@@ -556,8 +556,9 @@ export function HeroCsvCard() {
       >
         <span style={{ flexShrink: 0, color: "#2E8B57", fontSize: 14 }}>🔒</span>
         <span>
-          Your CSV and design are used only for the current batch. We do not store uploaded
-          spreadsheets, uploaded designs, or generated PDFs.
+          Your CSV and design are used only for the current batch and are never stored.
+          A copy of the finished download is kept for 7 days to prevent misuse, then
+          deleted automatically.
         </span>
       </div>
     </div>

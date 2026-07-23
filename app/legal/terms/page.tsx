@@ -28,8 +28,10 @@ export default function TermsPage() {
         </p>
         <p className="mt-4 text-sm leading-6 text-muted-foreground">
           Uploaded source files and generated downloads are not stored as projects.
-          We may change or discontinue the utility and may limit requests that threaten
-          the service or other users.
+          Generated downloads are retained privately for 7 days for abuse
+          investigation and then deleted automatically, as described on the privacy
+          page. We may change or discontinue the utility and may limit requests that
+          threaten the service or other users.
         </p>
       </article>
     </AppShell>

@@ -1,0 +1,61 @@
+name: Prune Output Archive
+
+# Backstop for the FTPS export archive in bulkCertGenOutputs/.
+#
+# The export route already prunes on every upload. This workflow enforces the
+# same retention window and size cap on days with no exports, or when uploads
+# have been failing, so the folder can never drift past 7 days / 5 GB.
+#
+# Required GitHub secrets (same NixiHost FTP account as duesoon-site):
+# - NIXIHOST_FTPS_HOST
+# - NIXIHOST_FTPS_USER
+# - NIXIHOST_FTPS_PASSWORD
+#
+# Optional GitHub secrets:
+# - NIXIHOST_OUTPUT_DIR                 (default /bulkCertGenOutputs)
+# - NIXIHOST_FTPS_VERIFY_CERTIFICATE    ("false" only after confirming a
+#                                        certificate/hostname mismatch)
+# - OUTPUT_ARCHIVE_RETENTION_DAYS       (default 7)
+# - OUTPUT_ARCHIVE_TOTAL_CAP_BYTES      (default 5368709120)
+
+on:
+  schedule:
+    # 04:17 UTC daily, offset from duesoon-site's 03:37 backup so the two jobs
+    # never contend for the same FTP account.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prune-output-archive
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: Prune bulkCertGenOutputs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prune remote archive
+        env:
+          NIXIHOST_FTPS_HOST: ${{ secrets.NIXIHOST_FTPS_HOST }}
+          NIXIHOST_FTPS_USER: ${{ secrets.NIXIHOST_FTPS_USER }}
+          NIXIHOST_FTPS_PASSWORD: ${{ secrets.NIXIHOST_FTPS_PASSWORD }}
+          NIXIHOST_FTPS_VERIFY_CERTIFICATE: ${{ secrets.NIXIHOST_FTPS_VERIFY_CERTIFICATE }}
+          NIXIHOST_OUTPUT_DIR: ${{ secrets.NIXIHOST_OUTPUT_DIR }}
+          OUTPUT_ARCHIVE_RETENTION_DAYS: ${{ secrets.OUTPUT_ARCHIVE_RETENTION_DAYS }}
+          OUTPUT_ARCHIVE_TOTAL_CAP_BYTES: ${{ secrets.OUTPUT_ARCHIVE_TOTAL_CAP_BYTES }}
+        run: npx tsx scripts/prune-output-archive.ts

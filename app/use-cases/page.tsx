@@ -8,7 +8,7 @@ import { getUseCasePath, useCasePages } from "@/lib/use-case-pages";
 export const metadata: Metadata = {
   title: "Use Cases",
   description:
-    "Use Batch, Please to create certificates, event badges, ID cards, mailing labels, appointment cards, table cards, gift tags, and workshop passes from CSV data.",
+    "Use Batch, Please to create certificates, event badges, ID cards, mailing labels, appointment cards, table cards, gift tags, and workshop passes from an Excel, Google Sheets, or CSV list.",
   alternates: { canonical: "/use-cases" },
 };
 
@@ -29,7 +29,7 @@ export default function UseCasesPage() {
             <p className="max-w-xl text-[17px] leading-7 text-[#57534a]">
               Batch, Please is for the practical jobs where one spreadsheet row becomes
               one finished PDF: certificates, badges, labels, cards, passes, and other
-              repeatable documents.
+              repeatable documents. Start from Excel, Google Sheets, or any CSV.
             </p>
           </div>
         </section>

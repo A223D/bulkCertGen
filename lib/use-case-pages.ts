@@ -3,6 +3,17 @@ export type UseCaseFaq = {
   answer: string;
 };
 
+/**
+ * Getting the list out of Excel or Google Sheets is the step people actually
+ * get stuck on — the app only accepts CSV. Pages that answer a spreadsheet-shaped
+ * search ("excel to certificate") carry these explicit export steps; the older
+ * output-shaped pages ("mailing labels from CSV") do not need them.
+ */
+export type SpreadsheetSteps = {
+  excel: string[];
+  googleSheets: string[];
+};
+
 export type UseCasePage = {
   slug: string;
   title: string;
@@ -20,6 +31,15 @@ export type UseCasePage = {
   workflow: string[];
   outputs: string[];
   faqs: UseCaseFaq[];
+  spreadsheetSteps?: SpreadsheetSteps;
+  /**
+   * Explicit "related" slugs, used where two pages answer neighbouring searches
+   * for the same job (e.g. `id-card-generator` and `id-cards-from-csv`). Linking
+   * the pair directly tells a reader — and a crawler — that they are companions
+   * rather than rivals for the same query. Falls back to the first three other
+   * pages when unset.
+   */
+  relatedSlugs?: string[];
 };
 
 export const useCasePages: UseCasePage[] = [
@@ -71,6 +91,11 @@ export const useCasePages: UseCasePage[] = [
           "For simple certificate batches, yes. It is built for CSV-to-PDF personalization without Word mail merge, formulas, or account setup.",
       },
     ],
+    relatedSlugs: [
+      "bulk-certificate-generator",
+      "excel-to-certificate",
+      "google-sheets-to-certificate",
+    ],
   },
   {
     slug: "event-badges-from-spreadsheet",
@@ -120,6 +145,11 @@ export const useCasePages: UseCasePage[] = [
           "Yes. Any CSV column can become a text field, including company, role, ticket type, session, table, or badge number.",
       },
     ],
+    relatedSlugs: [
+      "event-badge-generator",
+      "id-card-generator",
+      "workshop-passes-from-spreadsheet",
+    ],
   },
   {
     slug: "id-cards-from-csv",
@@ -168,6 +198,11 @@ export const useCasePages: UseCasePage[] = [
         answer:
           "No. Current fields are text fields placed over a PNG or JPG design. Per-row photo merging is not supported.",
       },
+    ],
+    relatedSlugs: [
+      "id-card-generator",
+      "event-badge-generator",
+      "mailing-labels-from-csv",
     ],
   },
   {
@@ -413,6 +448,340 @@ export const useCasePages: UseCasePage[] = [
         answer:
           "Yes. Create a CSV with just the late registrants and export those rows as a smaller batch.",
       },
+    ],
+  },
+  {
+    slug: "bulk-certificate-generator",
+    title: "Bulk certificate generator",
+    shortTitle: "Bulk certificates",
+    metadataTitle: "Bulk Certificate Generator",
+    metadataDescription:
+      "Generate certificates in bulk from an Excel, Google Sheets, or CSV list. Up to 500 per batch as one combined PDF or separate files. Free, no account needed.",
+    kicker: "Bulk certificate generator",
+    heroTitle: "Generate a whole certificate run in one pass.",
+    heroBody:
+      "When the list is long, the work is the repetition. Batch, Please takes an Excel export, a Google Sheets download, or a CSV and produces the entire certificate run at once — up to 500 per batch, as a single combined PDF you can send to a printer or separate named files you can email out individually.",
+    imageSrc: "/starter-designs/certificate-classic.png",
+    imageAlt: "Classic certificate design used as a Batch, Please starter template",
+    audience: ["Training providers", "Schools with many cohorts", "Certification programs"],
+    painPoints: [
+      "A cohort of 300 that has to go out the same afternoon",
+      "Design tools that slow to a crawl once the list gets long",
+      "Discovering one clipped name after the whole run is printed",
+    ],
+    csvColumns: [
+      "recipient_name",
+      "program",
+      "cohort",
+      "completion_date",
+      "certificate_id",
+    ],
+    workflow: [
+      "Download your recipient list from Excel or Google Sheets as a CSV.",
+      "Pick a built-in certificate or upload your own PNG/JPG artwork.",
+      "Place the fields once — they apply to every row in the batch.",
+      "Check the preflight report, then export the run as one PDF or a ZIP.",
+    ],
+    outputs: [
+      "One combined PDF, one certificate per page",
+      "A ZIP of separately named certificate PDFs",
+      "Filenames taken from a name or certificate_id column",
+    ],
+    faqs: [
+      {
+        question: "What if my list is longer than 500 rows?",
+        answer:
+          "The batch limit is 500 rows. A longer CSV is truncated to the first 500 and you are warned before export, so split the list into runs of 500 in your spreadsheet and export each run in turn.",
+      },
+      {
+        question: "Should I export one combined PDF or separate files?",
+        answer:
+          "A combined PDF is easier to print or hand to a print shop. Separate files are easier to email individually — each one is named from a column you choose, such as the recipient name or certificate ID.",
+      },
+      {
+        question: "Does a big batch take long?",
+        answer:
+          "No. The design and fonts are embedded once for the whole batch rather than per certificate, so a 500-row run finishes in about a second.",
+      },
+    ],
+    spreadsheetSteps: {
+      excel: [
+        "Put one recipient per row, with a single header row at the top.",
+        "File → Save As, then choose CSV UTF-8 (Comma delimited) so accented names survive.",
+        "Only the active sheet is saved, so make sure the recipient list is the sheet you are on.",
+      ],
+      googleSheets: [
+        "Keep the recipient list on one tab, with a single header row.",
+        "File → Download → Comma-separated values (.csv).",
+        "Formulas download as their calculated values, so a merged full_name column exports as finished text.",
+      ],
+    },
+    relatedSlugs: [
+      "certificate-generator-from-csv",
+      "excel-to-certificate",
+      "google-sheets-to-certificate",
+    ],
+  },
+  {
+    slug: "excel-to-certificate",
+    title: "Excel to certificate",
+    shortTitle: "Excel to certificate",
+    metadataTitle: "Excel to Certificate",
+    metadataDescription:
+      "Turn an Excel spreadsheet into personalized certificate PDFs. Save the .xlsx as CSV, place your columns on a certificate design, and export the whole list.",
+    kicker: "Excel to certificate PDFs",
+    heroTitle: "Your Excel list, printed onto certificates.",
+    heroBody:
+      "If the names are already in Excel, the certificate work is nearly done. Save the workbook as a CSV, upload it, and place columns such as name, course, and date onto a certificate design — Batch, Please fills in every row and exports finished PDFs. No mail merge, no Word document, no add-ins.",
+    imageSrc: "/starter-designs/certificate-modern.png",
+    imageAlt: "Modern certificate design used as a Batch, Please starter template",
+    audience: ["Excel-first admin teams", "Trainers keeping rosters in .xlsx", "Office coordinators"],
+    painPoints: [
+      "Word mail merge breaking every time the workbook changes",
+      "Dates arriving as 45231 instead of a readable date",
+      "Names with accents turning into question marks after export",
+    ],
+    csvColumns: ["first_name", "last_name", "course", "date_completed", "grade"],
+    workflow: [
+      "Tidy the sheet so row 1 is headers and every row below is one recipient.",
+      "Save As → CSV UTF-8 (Comma delimited), which writes the sheet you are on.",
+      "Upload that CSV, choose a certificate design, and place your columns.",
+      "Preview a few real rows, then export the certificates as PDFs.",
+    ],
+    outputs: [
+      "Certificate PDFs straight from an .xlsx list",
+      "One combined PDF for printing",
+      "Separate PDFs named from a column",
+    ],
+    faqs: [
+      {
+        question: "Can I upload an Excel file directly?",
+        answer:
+          "Not yet — the upload accepts .csv only. In Excel, use File → Save As and pick CSV UTF-8 (Comma delimited). The workbook itself is unchanged; you just get a .csv alongside it.",
+      },
+      {
+        question: "Why do my dates look like numbers?",
+        answer:
+          "Excel stores dates as serial numbers and CSV keeps whatever is displayed. Format the date column the way you want it to read on the certificate before saving as CSV, or type the dates as plain text.",
+      },
+      {
+        question: "Do accented or non-English names work?",
+        answer:
+          "Yes, as long as you save as CSV UTF-8 and pick a font that covers those characters. Before export, a preflight check flags any character the selected font cannot print instead of quietly rendering an empty box.",
+      },
+    ],
+    spreadsheetSteps: {
+      excel: [
+        "Row 1 must be headers, with no title row or merged cells above it.",
+        "Hidden columns and filtered-out rows are still written to the CSV — delete what you do not want.",
+        "File → Save As → CSV UTF-8 (Comma delimited). Excel saves only the active sheet.",
+      ],
+      googleSheets: [
+        "Working in Sheets instead? File → Download → Comma-separated values (.csv).",
+        "See the Google Sheets to certificate page for the Sheets-specific details.",
+      ],
+    },
+    relatedSlugs: [
+      "google-sheets-to-certificate",
+      "bulk-certificate-generator",
+      "certificate-generator-from-csv",
+    ],
+  },
+  {
+    slug: "google-sheets-to-certificate",
+    title: "Google Sheets to certificate",
+    shortTitle: "Sheets to certificate",
+    metadataTitle: "Google Sheets to Certificate",
+    metadataDescription:
+      "Turn a Google Sheet into personalized certificate PDFs. Download the sheet as CSV, place your columns on a certificate design, and export every row at once.",
+    kicker: "Google Sheets to certificates",
+    heroTitle: "From a shared sheet to finished certificates.",
+    heroBody:
+      "Attendance, sign-ups, and course rosters usually already live in a Google Sheet. Download that tab as a CSV, upload it, and place columns such as name, course, and completion date onto a certificate design. Every row becomes a certificate, without a script, an add-on, or granting access to your Drive.",
+    imageSrc: "/starter-designs/certificate-modern.png",
+    imageAlt: "Modern certificate design used with a Google Sheets roster",
+    audience: ["Teams working in Google Workspace", "Google Forms organizers", "Community and club leads"],
+    painPoints: [
+      "Add-ons that want full access to your Drive",
+      "Apps Script solutions nobody on the team can maintain",
+      "Form responses that need cleaning before they are presentable",
+    ],
+    csvColumns: ["full_name", "course_name", "completion_date", "instructor", "email"],
+    workflow: [
+      "Open the tab holding your roster — the download exports the active tab only.",
+      "File → Download → Comma-separated values (.csv).",
+      "Upload the CSV, pick a certificate design, and place your columns on it.",
+      "Preview real rows for text fit, then export the certificate PDFs.",
+    ],
+    outputs: [
+      "Certificate PDFs from a Sheets roster",
+      "Certificates from linked Google Forms responses",
+      "One combined PDF or separate files",
+    ],
+    faqs: [
+      {
+        question: "Can Batch, Please connect to my Google Sheet directly?",
+        answer:
+          "No, and that is deliberate. There is no account, no Drive permission, and no live connection to break — you download a CSV and upload it, so nothing of yours stays connected to this tool.",
+      },
+      {
+        question: "Which tab gets downloaded?",
+        answer:
+          "Only the tab you are viewing when you choose File → Download → CSV. If your roster is on a second tab, open that tab first.",
+      },
+      {
+        question: "What happens to my formulas?",
+        answer:
+          "They download as their results, not the formulas themselves. A column that joins first and last names, or looks up a course title, arrives as finished text ready to place on the certificate.",
+      },
+    ],
+    spreadsheetSteps: {
+      excel: [
+        "Working in Excel instead? File → Save As → CSV UTF-8 (Comma delimited).",
+        "See the Excel to certificate page for the Excel-specific details.",
+      ],
+      googleSheets: [
+        "Keep one header row at the top and one recipient per row below it.",
+        "Delete trailing empty rows — Sheets can export them as blank rows.",
+        "File → Download → Comma-separated values (.csv). Google Forms responses work the same way, via the linked response sheet.",
+      ],
+    },
+    relatedSlugs: [
+      "excel-to-certificate",
+      "bulk-certificate-generator",
+      "certificate-generator-from-csv",
+    ],
+  },
+  {
+    slug: "id-card-generator",
+    title: "ID card generator",
+    shortTitle: "ID card generator",
+    metadataTitle: "ID Card Generator",
+    metadataDescription:
+      "Make membership, staff, student, and event ID-style cards from an Excel, Google Sheets, or CSV list. Print at CR80 card size or several per sheet.",
+    kicker: "ID card generator",
+    heroTitle: "Print a card for every person on the list.",
+    heroBody:
+      "Batch, Please builds ID-style cards — membership cards, staff cards, student cards, club cards, event passes — from a spreadsheet and one card design. Set a real physical card size such as CR80, place the details, and print them one per page or several to a sheet for cutting.",
+    imageSrc: "/starter-designs/name-badge-classic.png",
+    imageAlt: "Classic badge design set up at card proportions",
+    audience: ["Membership organizations", "Small employers", "Clubs and community programs"],
+    painPoints: [
+      "Cards that print at the wrong size because the design was only ever pixels",
+      "Laying out a sheet of cards by hand for the guillotine",
+      "Artwork that looks fine on screen and blurry once printed",
+    ],
+    csvColumns: ["cardholder_name", "card_number", "membership_type", "valid_until", "department"],
+    workflow: [
+      "Export the cardholder list from Excel or Google Sheets as a CSV.",
+      "Upload your card artwork and set the finished size — CR80 is 3.375 × 2.125 in.",
+      "Place name, number, type, and expiry fields, and check the print-resolution warning.",
+      "Export one card per page, or several per sheet with crop marks for trimming.",
+    ],
+    outputs: [
+      "CR80-size card PDFs",
+      "Sheets of cards with crop marks",
+      "Custom card sizes in inches or mm",
+    ],
+    faqs: [
+      {
+        question: "What kinds of ID cards is this for?",
+        answer:
+          "Membership cards, staff and student cards, club cards, volunteer cards, and event passes. It is not for government-issued or official identity documents, and it must not be used to imitate one.",
+      },
+      {
+        question: "Can each card have the person's photo?",
+        answer:
+          "No. Fields are text placed over one shared PNG or JPG design, so a per-person photo cannot be merged in. Everything else on the card can vary by row.",
+      },
+      {
+        question: "Will the cards print at the right size?",
+        answer:
+          "Yes, because you set the finished size in inches or millimetres rather than pixels. Batch, Please also shows the effective print resolution for that size and warns you before export if the artwork would look blurry.",
+      },
+    ],
+    spreadsheetSteps: {
+      excel: [
+        "One cardholder per row, with a single header row.",
+        "Format card numbers as text so Excel does not strip leading zeros.",
+        "File → Save As → CSV UTF-8 (Comma delimited).",
+      ],
+      googleSheets: [
+        "One cardholder per row on a single tab.",
+        "Format → Number → Plain text for card-number columns, so 00042 stays 00042.",
+        "File → Download → Comma-separated values (.csv).",
+      ],
+    },
+    relatedSlugs: [
+      "id-cards-from-csv",
+      "event-badge-generator",
+      "event-badges-from-spreadsheet",
+    ],
+  },
+  {
+    slug: "event-badge-generator",
+    title: "Event badge generator",
+    shortTitle: "Badge generator",
+    metadataTitle: "Event Badge Generator",
+    metadataDescription:
+      "Make printable event badges from an Excel, Google Sheets, or CSV attendee list. Choose a badge size, fit several per sheet, and reprint walk-ins in seconds.",
+    kicker: "Event badge generator",
+    heroTitle: "Badge production, from registration list to print run.",
+    heroBody:
+      "The badge itself is the easy part — printing four hundred of them, at the right size, in time for the doors opening, is not. Batch, Please takes your attendee export and produces sheets of badges sized to your holders, plus one-off reprints for the walk-ins who register at the desk.",
+    imageSrc: "/starter-designs/name-badge-modern.png",
+    imageAlt: "Modern name badge design used as a Batch, Please starter template",
+    audience: ["Conference producers", "Trade show teams", "Registration desk staff"],
+    painPoints: [
+      "Badges that do not line up with the holders you already bought",
+      "Wasting card stock on sheets with one badge per page",
+      "No quick way to print a badge for someone who turns up unregistered",
+    ],
+    csvColumns: ["attendee_name", "organization", "ticket_type", "badge_number", "track"],
+    workflow: [
+      "Download the attendee list from your registration tool, Excel, or Google Sheets as CSV.",
+      "Set the badge size to match your holders — 4 × 3 in and 3.5 × 2.25 in are common.",
+      "Place name, organization, ticket type, and track fields on the badge design.",
+      "Export several badges per sheet with crop marks, and print.",
+    ],
+    outputs: [
+      "Badge sheets sized to your holders",
+      "Crop marks for clean trimming",
+      "Single-badge PDFs for walk-in reprints",
+    ],
+    faqs: [
+      {
+        question: "What badge size should I use?",
+        answer:
+          "Match the insert size of the holders you bought — 4 × 3 in and 3.5 × 2.25 in are the common ones. You set the finished size in inches or millimetres, so any holder size works.",
+      },
+      {
+        question: "Can I print a badge for someone who registers at the door?",
+        answer:
+          "Yes. Make a CSV with just that person, or a handful of them, and export a single badge. A one-row export downloads as a plain PDF rather than a ZIP.",
+      },
+      {
+        question: "Can different ticket types have different badge designs?",
+        answer:
+          "Run one batch per design. Filter the attendee list by ticket type in your spreadsheet, export each filtered list as its own CSV, and pair it with that design.",
+      },
+    ],
+    spreadsheetSteps: {
+      excel: [
+        "One attendee per row, headers in row 1, no title row above them.",
+        "Filtered-out rows still export, so delete the rows you do not want on badges.",
+        "File → Save As → CSV UTF-8 (Comma delimited) to keep accented names intact.",
+      ],
+      googleSheets: [
+        "Registration exports usually open in Sheets already — check that row 1 is headers.",
+        "File → Download → Comma-separated values (.csv), which exports the active tab.",
+        "For per-track badge runs, duplicate the tab and delete the other tracks before downloading.",
+      ],
+    },
+    relatedSlugs: [
+      "event-badges-from-spreadsheet",
+      "id-card-generator",
+      "workshop-passes-from-spreadsheet",
     ],
   },
 ];

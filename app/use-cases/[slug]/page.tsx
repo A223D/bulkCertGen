@@ -98,7 +98,15 @@ export default async function UseCaseLandingPage({ params }: PageProps) {
     notFound();
   }
 
-  const relatedPages = useCasePages.filter((item) => item.slug !== page.slug).slice(0, 3);
+  const relatedPages = (
+    page.relatedSlugs
+      ? page.relatedSlugs
+          .map((slug) => getUseCasePage(slug))
+          .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      : useCasePages.filter((item) => item.slug !== page.slug)
+  )
+    .filter((item) => item.slug !== page.slug)
+    .slice(0, 3);
   const structuredData = [
     {
       "@context": "https://schema.org",
@@ -255,6 +263,55 @@ export default async function UseCaseLandingPage({ params }: PageProps) {
             </div>
           </div>
         </section>
+
+        {page.spreadsheetSteps ? (
+          <section
+            id="spreadsheet"
+            className="mx-auto max-w-[1180px] px-4 py-14 sm:px-8"
+          >
+            <p className="font-mono text-xs font-semibold uppercase tracking-[0.12em] text-[#a8780c]">
+              Starting point
+            </p>
+            <h2 className="mt-3 max-w-2xl text-[34px] font-extrabold leading-tight tracking-[-0.02em]">
+              Getting your list out of Excel or Google Sheets.
+            </h2>
+            <p className="mt-4 max-w-2xl text-[16px] leading-7 text-[#57534a]">
+              The upload accepts CSV files. Both Excel and Google Sheets save one
+              in a couple of clicks — the details below are the parts that
+              usually trip people up.
+            </p>
+            <div className="mt-8 grid gap-5 lg:grid-cols-2">
+              <div className="rounded-[18px] border border-[#e7e2d6] bg-white p-6">
+                <h3 className="text-[18px] font-extrabold">From Microsoft Excel</h3>
+                <ul className="mt-4 grid gap-3">
+                  {page.spreadsheetSteps.excel.map((step) => (
+                    <li
+                      key={step}
+                      className="flex gap-3 text-[15px] leading-6 text-[#57534a]"
+                    >
+                      <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#f2b01e]" />
+                      {step}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-[18px] border border-[#e7e2d6] bg-white p-6">
+                <h3 className="text-[18px] font-extrabold">From Google Sheets</h3>
+                <ul className="mt-4 grid gap-3">
+                  {page.spreadsheetSteps.googleSheets.map((step) => (
+                    <li
+                      key={step}
+                      className="flex gap-3 text-[15px] leading-6 text-[#57534a]"
+                    >
+                      <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#f2b01e]" />
+                      {step}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section id="workflow" className="mx-auto grid max-w-[1180px] gap-10 px-4 py-14 sm:px-8 lg:grid-cols-[0.85fr_1.15fr]">
           <div>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope, JetBrains_Mono, DM_Serif_Display } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { siteUrl } from "@/lib/site";
 import "./globals.css";
 
@@ -86,6 +87,21 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${manrope.variable} ${jetbrainsMono.variable} ${dmSerifDisplay.variable}`}>
         {children}
+        {/*
+          Vercel Web Analytics. Page views only — custom events are a paid
+          feature, so `track()` would be a no-op here and export counts stay
+          with the anonymous Upstash daily counter.
+
+          Mounted at the root so `/create` reports too: the landing-page view
+          against the `/create` view is the only funnel signal available
+          without custom events, and it is what tells us how much traffic the
+          desktop-only gate turns away.
+
+          Route paths carry no user data (`/`, `/use-cases/[slug]`, `/create`),
+          so no `beforeSend` redaction is needed. If a route ever takes a query
+          string or dynamic segment derived from CSV input, add one.
+        */}
+        <Analytics />
       </body>
     </html>
   );

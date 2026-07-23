@@ -59,6 +59,23 @@ export default function PrivacyPage() {
           nothing else). No CSV values, names, design contents, filenames, or
           identifiers are stored in that counter.
         </p>
+        <h2 className="mt-8 text-lg font-semibold">Site analytics</h2>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          We use Vercel Web Analytics to count page views, so we can see which
+          pages people find useful and how many visitors arrive on a phone. It
+          sets <strong>no cookies</strong> and does not follow you across other
+          websites. For each page view it records the page address, the site
+          that linked you here, an approximate location (country, region, city),
+          your browser, operating system, and device type. Visitors are counted
+          using a temporary hash derived from the request, which is discarded
+          after 24 hours — it is not stored against you.
+        </p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          Analytics only ever sees page addresses. Your spreadsheet, your design
+          file, your field text, and your generated PDFs are never sent to it,
+          and the short-term copy of your export described above is never used
+          for analytics.
+        </p>
       </article>
     </AppShell>
   );

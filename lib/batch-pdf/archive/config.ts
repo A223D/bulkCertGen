@@ -18,23 +18,31 @@ export const ARCHIVE_DEFAULTS = {
   /**
    * Largest single archive we will upload.
    *
-   * Bounds /tmp usage on Vercel (512 MB writable), stops one pathological batch
-   * from evicting a week of files, and — the binding constraint — keeps the
-   * transfer inside the time budget below. FTP throughput to shared hosting is
-   * typically a few MB/s, so anything much larger would reliably burn the whole
-   * budget and fail. Raise it if measured throughput supports it; the trade-off
-   * is that batches above the ceiling are skipped, and large batches are the
-   * ones most worth being able to investigate.
+   * Stops one pathological batch from evicting a week of files, and is bounded
+   * by two platform limits: Vercel gives roughly 512 MB of writable /tmp for the
+   * streaming spool, and the transfer has to finish inside the time budget
+   * below. At the few MB/s that FTP to shared hosting typically manages, 256 MB
+   * takes on the order of two minutes — inside the budget, with room for a slow
+   * day. Raise it if measured throughput supports it; the trade-off is that
+   * batches above the ceiling are skipped, and large batches are the ones most
+   * worth being able to investigate.
    */
-  maxArchiveBytes: 100 * 1024 * 1024,
-  /** Per-FTP-operation socket timeout. */
+  maxArchiveBytes: 256 * 1024 * 1024,
+  /**
+   * Per-FTP-operation socket timeout. This is an *inactivity* timeout, not a
+   * transfer budget, so it does not scale with the per-file ceiling — a healthy
+   * upload keeps the data socket busy no matter how large it is. Kept short so a
+   * dead socket is detected quickly rather than idling away the whole budget.
+   */
   operationTimeoutMs: 20_000,
   /**
    * Whole-upload budget, including listing and pruning. Deliberately well under
-   * the route's `maxDuration` (60s on Vercel Hobby) so this timeout fires — and
-   * removes the partial upload — before the platform kills the invocation.
+   * the route's `maxDuration` (300s on Vercel Hobby, the plan's ceiling) so this
+   * timeout fires — and removes the partial upload — before the platform kills
+   * the invocation. The remaining headroom is what rendering and the response
+   * get, since `after()` shares the same invocation.
    */
-  totalTimeoutMs: 45_000,
+  totalTimeoutMs: 240_000,
   /** Interrupted uploads leave `.part` files; sweep them after this long. */
   partialMaxAgeMs: 24 * 60 * 60 * 1000,
 } as const;

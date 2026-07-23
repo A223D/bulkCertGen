@@ -41,12 +41,20 @@ import {
 export const runtime = "nodejs";
 
 /**
- * Vercel Hobby caps a function at 60s. That budget covers rendering, the
- * response, and the `after()` archive upload, so the archive's own timeouts in
+ * Vercel Hobby caps a function at 300s (both the default and the ceiling under
+ * fluid compute). That budget covers rendering, the response, and the `after()`
+ * archive upload, so the archive's own timeouts in
  * `lib/batch-pdf/archive/config.ts` are set to expire well inside it — our
  * timeout cleans up the abandoned `.part` file, a platform kill does not.
+ *
+ * Asking for the ceiling costs nothing on its own: Hobby bills Active CPU while
+ * code executes and pauses it during I/O, and the archive upload is almost all
+ * I/O wait.
+ *
+ * Kept as a literal because Next.js only reads statically analyzable route
+ * segment config; the budget test imports this value rather than duplicating it.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 async function trackFlowCompleted(): Promise<void> {
   const url = process.env.UPSTASH_REDIS_REST_URL;

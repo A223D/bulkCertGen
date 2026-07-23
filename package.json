@@ -22,6 +22,7 @@
     "@radix-ui/react-tooltip": "^1.2.10",
     "@react-pdf/renderer": "^4.5.1",
     "@types/papaparse": "^5.5.2",
+    "@vercel/analytics": "^2.0.1",
     "archiver": "^7.0.1",
     "basic-ftp": "^6.0.1",
     "jpeg-js": "^0.4.4",
